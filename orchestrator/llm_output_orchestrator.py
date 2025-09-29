@@ -1,7 +1,18 @@
-# orchestrator/fact_check_orchestrator.py
+# orchestrator/llm_output_orchestrator.py
 from langsmith import traceable
 import time
-import asyncio
+import os
+from typing import Dict, List
+
+# Import all components with fixed paths
+from utils.html_parser import HTMLParser
+from agents.analyser import FactAnalyzer
+from agents.browserless_scraper import FactCheckScraper
+from agents.highlighter import Highlighter
+from agents.fact_checker import FactChecker
+from utils.file_manager import FileManager
+from utils.logger import fact_logger
+from utils.langsmith_config import langsmith_config
 
 class FactCheckOrchestrator:
     """Coordinate fact-checking pipeline with full LangSmith tracing"""
@@ -22,7 +33,7 @@ class FactCheckOrchestrator:
         run_type="chain",
         tags=["orchestrator", "full-pipeline"]
     )
-    async def process(self, html_content: str) -> dict:
+    async def process(self, html_content: str) -> Dict:
         """
         Main pipeline with comprehensive tracing and logging
         """
@@ -124,16 +135,16 @@ class FactCheckOrchestrator:
             raise
 
     @traceable(name="parse_html", run_type="tool")
-    async def _traced_parse(self, html_content: str) -> dict:
+    async def _traced_parse(self, html_content: str) -> Dict:
         """Parse HTML with tracing"""
         return self.parser.parse_input(html_content)
 
     @traceable(name="scrape_all_sources", run_type="tool")
-    async def _traced_scrape(self, urls: list, session_id: str) -> dict:
+    async def _traced_scrape(self, urls: List[str], session_id: str) -> Dict[str, str]:
         """Scrape with tracing"""
         return await self.scraper.scrape_urls_for_facts(urls)
 
-    def _generate_summary(self, results: list) -> dict:
+    def _generate_summary(self, results: List) -> Dict:
         """Generate summary statistics"""
         if not results:
             return {

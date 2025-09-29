@@ -1,10 +1,20 @@
-langchain
-langchain-openai  # or langchain-anthropic
-langsmith  # LangSmith integration
-playwright
-beautifulsoup4
-lxml
-flask
-python-dotenv
-pydantic
-loguru  # Better logging than standard logging
+# LangChain and AI
+langchain==0.1.0
+langchain-openai==0.0.5
+langsmith==0.0.77
+
+# Web scraping
+playwright==1.41.0
+beautifulsoup4==4.12.3
+lxml==5.1.0
+
+# Web framework
+flask==3.0.0
+
+# Utilities
+python-dotenv==1.0.0
+pydantic==2.5.3
+loguru==0.7.2
+
+# For Railway deployment
+gunicorn==21.2.0

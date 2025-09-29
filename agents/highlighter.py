@@ -3,11 +3,13 @@ from langchain.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from langsmith import traceable
 import time
+from typing import Dict, List
 
-from utils import langsmith_config
+# Fixed imports
+from utils.langsmith_config import langsmith_config
 from utils.logger import fact_logger
 from agents.analyser import Fact
-from prompts import highlighter_prompts
+from prompts.highlighter_prompts import get_highlighter_prompts
 
 class Highlighter:
     """Extract relevant excerpts with LangSmith tracing"""
@@ -19,6 +21,9 @@ class Highlighter:
             temperature=0
         )
 
+        # Load prompts
+        self.prompts = get_highlighter_prompts()
+
         fact_logger.log_component_start("Highlighter", model="gpt-4o-mini")
 
     @traceable(
@@ -26,7 +31,7 @@ class Highlighter:
         run_type="chain",
         tags=["excerpt-extraction", "highlighter"]
     )
-    async def highlight(self, fact: Fact, scraped_content: dict) -> dict:
+    async def highlight(self, fact: Fact, scraped_content: Dict[str, str]) -> Dict[str, List[Dict]]:
         """
         Find excerpts that mention or support the fact
         Returns: {url: [excerpts]}
@@ -87,34 +92,12 @@ class Highlighter:
         return results
 
     @traceable(name="extract_single_excerpt", run_type="llm")
-    async def _extract_excerpts(self, fact: Fact, url: str, content: str) -> list:
+    async def _extract_excerpts(self, fact: Fact, url: str, content: str) -> List[Dict]:
         """Extract excerpts from a single source"""
 
         prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are an expert at finding relevant excerpts.
-            Find ALL passages that mention or support the given fact.
-            Return exact quotes with surrounding context.
-            If the fact is not mentioned, return an empty array.
-
-            Return JSON:
-            {
-              "excerpts": [
-                {
-                  "quote": "exact text from source",
-                  "context": "broader context around the quote",
-                  "relevance": 0.95,
-                  "start_position": "approximate location in text"
-                }
-              ]
-            }"""),
-            ("user", """Fact: {fact}
-
-Source URL: {url}
-
-Source content (truncated to 8000 chars):
-{content}
-
-Extract all relevant excerpts.""")
+            ("system", self.prompts["system"]),
+            ("user", self.prompts["user"])
         ])
 
         callbacks = langsmith_config.get_callbacks(f"highlighter_{fact.id}")

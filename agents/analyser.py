@@ -5,7 +5,7 @@ from langsmith import traceable
 from pydantic import BaseModel, Field
 from typing import List
 import time
-import json
+from langchain_core.output_parsers import JsonOutputParser
 from prompts.analyzer_prompts import get_analyzer_prompts
 from utils.logger import fact_logger
 from utils.langsmith_config import langsmith_config
@@ -27,17 +27,14 @@ class FactAnalyzer:
     def __init__(self, config):
         self.config = config
 
-        # Create base LLM WITHOUT model_kwargs for JSON
+        # Create base LLM without JSON mode
         self.llm = ChatOpenAI(
             model="gpt-4o-mini",
-            temperature=0.1
+            temperature=0
         )
 
-        # Use with_structured_output for proper JSON handling
-        self.structured_llm = self.llm.with_structured_output(
-            FactList,
-            method="json_mode"
-        )
+        # Use JsonOutputParser for reliable JSON parsing
+        self.parser = JsonOutputParser(pydantic_object=FactList)
 
         # Load prompts during initialization
         self.prompts = get_analyzer_prompts()
@@ -65,21 +62,24 @@ class FactAnalyzer:
         )
 
         try:
-            # Create prompt that explicitly asks for JSON
-            system_prompt = self.prompts["system"] + "\n\nIMPORTANT: Return ONLY valid JSON with the exact structure shown. No markdown, no code blocks."
-
+            # Create prompt with format instructions from parser
             prompt = ChatPromptTemplate.from_messages([
-                ("system", system_prompt),
-                ("user", self.prompts["user"])
+                ("system", self.prompts["system"]),
+                ("user", self.prompts["user"] + "\n\n{format_instructions}")
             ])
+
+            # Add format instructions to the input
+            prompt_with_format = prompt.partial(
+                format_instructions=self.parser.get_format_instructions()
+            )
 
             # Get callbacks for LangSmith (safe to call)
             callbacks = langsmith_config.get_callbacks("fact_analyzer")
 
-            # Create chain with structured output
-            chain = prompt | self.structured_llm
+            # Create chain: prompt -> llm -> parser
+            chain = prompt_with_format | self.llm | self.parser
 
-            fact_logger.logger.debug("🔗 Invoking LangChain with structured output")
+            fact_logger.logger.debug("🔗 Invoking LangChain with JsonOutputParser")
 
             # Safe callback usage
             config = {}
@@ -94,30 +94,18 @@ class FactAnalyzer:
                 config=config
             )
 
-            # result is now a FactList Pydantic object
-            facts_data = result.facts if hasattr(result, 'facts') else result.get('facts', [])
+            # result is now a dict with parsed JSON
+            facts_data = result.get('facts', [])
 
             # Convert to Fact objects
             facts = []
             for i, fact_data in enumerate(facts_data):
-                # Handle both dict and object formats
-                if isinstance(fact_data, dict):
-                    statement = fact_data.get('statement', '')
-                    sources = fact_data.get('sources', [])
-                    original_text = fact_data.get('original_text', '')
-                    confidence = fact_data.get('confidence', 1.0)
-                else:
-                    statement = fact_data.statement
-                    sources = fact_data.sources
-                    original_text = fact_data.original_text
-                    confidence = fact_data.confidence
-
                 fact = Fact(
                     id=f"fact{i+1}",
-                    statement=statement,
-                    sources=sources,
-                    original_text=original_text,
-                    confidence=confidence
+                    statement=fact_data.get('statement', ''),
+                    sources=fact_data.get('sources', []),
+                    original_text=fact_data.get('original_text', ''),
+                    confidence=fact_data.get('confidence', 1.0)
                 )
                 facts.append(fact)
 

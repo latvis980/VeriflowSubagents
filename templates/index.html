@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Fact Checker</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔍 AI Fact Checker</h1>
+            <p class="subtitle">Verify facts from ChatGPT and Perplexity outputs</p>
+        </header>
+
+        <main>
+            <!-- Input Section -->
+            <section class="input-section">
+                <div class="section-header">
+                    <h2>📋 Paste Your LLM Output</h2>
+                    <p class="help-text">Copy and paste HTML from ChatGPT or Perplexity (including links)</p>
+                </div>
+
+                <div class="input-wrapper">
+                    <textarea 
+                        id="htmlInput" 
+                        placeholder="Paste your HTML content here...&#10;&#10;Example:&#10;&lt;p&gt;The hotel opened in March 2017. &lt;a href='https://example.com'&gt;Source&lt;/a&gt;&lt;/p&gt;"
+                        rows="12"
+                    ></textarea>
+
+                    <div class="input-actions">
+                        <button id="clearBtn" class="btn-secondary">Clear</button>
+                        <button id="checkBtn" class="btn-primary">
+                            <span class="btn-text">Check Facts</span>
+                            <span class="btn-loading" style="display: none;">
+                                <span class="spinner"></span> Processing...
+                            </span>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Status Section -->
+            <section id="statusSection" class="status-section" style="display: none;">
+                <div class="status-box">
+                    <div class="status-icon">⏳</div>
+                    <div class="status-text">
+                        <h3 id="statusTitle">Processing...</h3>
+                        <p id="statusMessage">Analyzing your content and checking sources</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Results Section -->
+            <section id="resultsSection" class="results-section" style="display: none;">
+                <!-- Summary Card -->
+                <div class="summary-card">
+                    <h2>📊 Summary</h2>
+                    <div class="summary-grid">
+                        <div class="summary-item">
+                            <div class="summary-label">Total Facts</div>
+                            <div class="summary-value" id="totalFacts">0</div>
+                        </div>
+                        <div class="summary-item accurate">
+                            <div class="summary-label">Accurate (≥0.9)</div>
+                            <div class="summary-value" id="accurateFacts">0</div>
+                        </div>
+                        <div class="summary-item good">
+                            <div class="summary-label">Good Match (0.7-0.9)</div>
+                            <div class="summary-value" id="goodFacts">0</div>
+                        </div>
+                        <div class="summary-item questionable">
+                            <div class="summary-label">Questionable (&lt;0.7)</div>
+                            <div class="summary-value" id="questionableFacts">0</div>
+                        </div>
+                    </div>
+                    <div class="avg-score">
+                        Average Score: <strong id="avgScore">0.00</strong>
+                    </div>
+                    <div class="session-info">
+                        Session ID: <code id="sessionId">-</code>
+                        <span class="separator">•</span>
+                        Duration: <span id="duration">0s</span>
+                    </div>
+                </div>
+
+                <!-- Facts List -->
+                <div class="facts-container">
+                    <h2>📝 Fact Analysis</h2>
+                    <div id="factsList"></div>
+                </div>
+
+                <!-- LangSmith Link -->
+                <div class="langsmith-link">
+                    <a id="langsmithUrl" href="#" target="_blank" rel="noopener noreferrer">
+                        📊 View Full Trace in LangSmith →
+                    </a>
+                </div>
+
+                <!-- Actions -->
+                <div class="results-actions">
+                    <button id="exportBtn" class="btn-secondary">Export Report</button>
+                    <button id="newCheckBtn" class="btn-primary">Check Another</button>
+                </div>
+            </section>
+
+            <!-- Error Section -->
+            <section id="errorSection" class="error-section" style="display: none;">
+                <div class="error-box">
+                    <div class="error-icon">❌</div>
+                    <div class="error-content">
+                        <h3>Error</h3>
+                        <p id="errorMessage"></p>
+                        <button id="retryBtn" class="btn-primary">Try Again</button>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>Powered by LangChain + Railway Browserless • <a href="/api/health" target="_blank">Health Check</a></p>
+        </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

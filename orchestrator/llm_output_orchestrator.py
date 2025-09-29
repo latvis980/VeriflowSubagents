@@ -1,10 +1,10 @@
 # orchestrator/llm_output_orchestrator.py
 from langsmith import traceable
 import time
+import asyncio
 import os
-from typing import Dict, List
 
-# Import all components with fixed paths
+# Fix imports - these components need to be imported correctly
 from utils.html_parser import HTMLParser
 from agents.analyser import FactAnalyzer
 from agents.browserless_scraper import FactCheckScraper
@@ -33,7 +33,7 @@ class FactCheckOrchestrator:
         run_type="chain",
         tags=["orchestrator", "full-pipeline"]
     )
-    async def process(self, html_content: str) -> Dict:
+    async def process(self, html_content: str) -> dict:
         """
         Main pipeline with comprehensive tracing and logging
         """
@@ -135,16 +135,16 @@ class FactCheckOrchestrator:
             raise
 
     @traceable(name="parse_html", run_type="tool")
-    async def _traced_parse(self, html_content: str) -> Dict:
+    async def _traced_parse(self, html_content: str) -> dict:
         """Parse HTML with tracing"""
         return self.parser.parse_input(html_content)
 
     @traceable(name="scrape_all_sources", run_type="tool")
-    async def _traced_scrape(self, urls: List[str], session_id: str) -> Dict[str, str]:
+    async def _traced_scrape(self, urls: list, session_id: str) -> dict:
         """Scrape with tracing"""
         return await self.scraper.scrape_urls_for_facts(urls)
 
-    def _generate_summary(self, results: List) -> Dict:
+    def _generate_summary(self, results: list) -> dict:
         """Generate summary statistics"""
         if not results:
             return {

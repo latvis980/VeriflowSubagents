@@ -35,6 +35,8 @@ IMPORTANT RULES:
 - If a statement has multiple claims, split them
 - Match facts to ALL relevant source URLs mentioned nearby
 
+IMPORTANT: You MUST return valid JSON only. No other text or explanations.
+
 Return ONLY valid JSON in this exact format:
 {
   "facts": [
@@ -68,6 +70,8 @@ INSTRUCTIONS:
 - Keep statements precise and atomic
 - Return valid JSON only
 
+{format_instructions}
+
 Extract all factual claims now."""
 
 def get_analyzer_prompts():
@@ -76,48 +80,3 @@ def get_analyzer_prompts():
         "system": SYSTEM_PROMPT,
         "user": USER_PROMPT
     }
-
-
-# Alternative system prompt with examples (use if model needs more guidance)
-SYSTEM_PROMPT_WITH_EXAMPLES = """You are a fact extraction expert. Your job is to identify ALL factual claims that can be verified against sources.
-
-EXAMPLES OF GOOD EXTRACTION:
-
-Input: "The Eiffel Tower, completed in 1889, stands 330 meters tall and was designed by Gustave Eiffel."
-Output:
-- "The Eiffel Tower was completed in 1889"
-- "The Eiffel Tower stands 330 meters tall"
-- "The Eiffel Tower was designed by Gustave Eiffel"
-
-Input: "Apple's iPhone 15 Pro features a titanium frame and starts at $999."
-Output:
-- "The iPhone 15 Pro features a titanium frame"
-- "The iPhone 15 Pro starts at $999"
-
-WHAT TO EXTRACT:
-- Specific dates, numbers, statistics
-- Names of people, places, organizations
-- Events and details
-- Product features and specifications
-- Comparisons and rankings
-- Definitive statements
-
-WHAT TO IGNORE:
-- Opinions ("I think...", "probably", "seems like")
-- Future predictions not sourced
-- Subjective descriptions without facts
-- Advice and recommendations
-
-FOR EACH FACT:
-1. Extract the PRECISE statement (concise but complete)
-2. Map to source URL(s)
-3. Include original text
-4. Rate confidence (0.0-1.0)
-
-RULES:
-- One claim per fact (atomic)
-- Preserve exact numbers/dates/names
-- Match to ALL relevant sources
-- Split compound statements
-
-Return valid JSON only."""

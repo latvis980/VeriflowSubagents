@@ -36,6 +36,8 @@ IMPORTANT:
 - Extract complete sentences for clarity
 - Multiple excerpts are better than one long excerpt
 
+IMPORTANT: You MUST return valid JSON only. No other text or explanations.
+
 Return ONLY valid JSON in this exact format:
 {
   "excerpts": [
@@ -73,6 +75,8 @@ INSTRUCTIONS:
 - If the fact is not mentioned at all, return empty array: {{"excerpts": []}}
 - Return valid JSON only
 
+{format_instructions}
+
 Find all relevant excerpts now."""
 
 
@@ -82,78 +86,3 @@ def get_highlighter_prompts():
         "system": SYSTEM_PROMPT,
         "user": USER_PROMPT
     }
-
-
-# Alternative: More structured prompt with examples
-SYSTEM_PROMPT_WITH_EXAMPLES = """You are an expert at finding relevant excerpts in source documents.
-
-EXAMPLE 1:
-Fact: "The Eiffel Tower was completed in 1889"
-Source text: "...Construction of the Eiffel Tower began in 1887 and was finished in 1889. The tower was built for the World's Fair..."
-
-Correct extraction:
-{
-  "excerpts": [
-    {
-      "quote": "Construction of the Eiffel Tower began in 1887 and was finished in 1889.",
-      "context": "Construction of the Eiffel Tower began in 1887 and was finished in 1889. The tower was built for the World's Fair.",
-      "relevance": 1.0,
-      "start_position": "paragraph 1"
-    }
-  ]
-}
-
-EXAMPLE 2:
-Fact: "The iPhone 15 Pro costs $999"
-Source text: "...Apple's latest flagship offers several pricing tiers. The iPhone 15 starts at $799. For those wanting premium features, the Pro model begins at $999..."
-
-Correct extraction:
-{
-  "excerpts": [
-    {
-      "quote": "For those wanting premium features, the Pro model begins at $999.",
-      "context": "Apple's latest flagship offers several pricing tiers. The iPhone 15 starts at $799. For those wanting premium features, the Pro model begins at $999.",
-      "relevance": 0.95,
-      "start_position": "paragraph 2"
-    }
-  ]
-}
-
-EXAMPLE 3 (fact not found):
-Fact: "The hotel has a rooftop pool"
-Source text: "...The hotel features a luxurious spa, fitness center, and three restaurants. Guests praise the elegant lobby design..."
-
-Correct response:
-{
-  "excerpts": []
-}
-
-YOUR TASK:
-Find ALL excerpts that mention or relate to the given fact. Be thorough, precise, and honest."""
-
-
-# Prompt for handling structured/markdown content
-SYSTEM_PROMPT_STRUCTURED = """You are an expert at finding relevant excerpts in structured source documents (with headings, sections, etc.).
-
-SPECIAL CONSIDERATIONS FOR STRUCTURED CONTENT:
-- Pay attention to section headings (marked with #, ##, ###)
-- Headings provide important context for the facts below them
-- Include the relevant heading in your "context" when it adds clarity
-- Navigate through the document structure logically
-
-Example structured content:
-```
-## Hotel Information
-The Grand Hotel opened in March 2017.
-
-### Amenities
-- 200 luxury rooms
-- Rooftop pool
-- Three restaurants
-```
-
-For fact "The hotel opened in March 2017", include:
-- The direct quote
-- The section heading "Hotel Information" in context
-
-Otherwise, follow all standard extraction guidelines."""

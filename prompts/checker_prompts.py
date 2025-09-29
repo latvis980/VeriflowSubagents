@@ -58,6 +58,8 @@ BE STRICT BUT FAIR:
 - Note ANY issues, no matter how minor
 - If you're uncertain, explain why in your reasoning
 
+IMPORTANT: You MUST return valid JSON only. No other text or explanations.
+
 Return ONLY valid JSON in this exact format:
 {
   "match_score": 0.95,
@@ -87,6 +89,8 @@ INSTRUCTIONS:
 
 Be thorough, precise, and strict. Return valid JSON only.
 
+{format_instructions}
+
 Evaluate now."""
 
 
@@ -96,104 +100,3 @@ def get_checker_prompts():
         "system": SYSTEM_PROMPT,
         "user": USER_PROMPT
     }
-
-
-# Alternative: With scoring examples
-SYSTEM_PROMPT_WITH_EXAMPLES = """You are a rigorous fact-checking expert. Here are examples of how to score:
-
-EXAMPLE 1 - Perfect Match (1.0):
-Claim: "The Eiffel Tower was completed in 1889"
-Source: "Construction of the Eiffel Tower was completed in 1889"
-Score: 1.0
-Reasoning: Exact match on the key fact (completion date). No discrepancies.
-
-EXAMPLE 2 - Excellent Match (0.9):
-Claim: "The iPhone 15 Pro starts at $999"
-Source: "Apple's iPhone 15 Pro begins at a starting price of $999"
-Score: 0.9
-Reasoning: Same fact, slightly different wording. The price is exact.
-
-EXAMPLE 3 - Good Match (0.75):
-Claim: "The hotel has 200 rooms"
-Source: "The hotel features approximately 200 guest rooms and suites"
-Fact Score: 0.75
-Reasoning: Core fact is correct, but source says "approximately" and includes "suites" which adds nuance. The claim omits these qualifiers.
-
-EXAMPLE 4 - Questionable (0.6):
-Claim: "The company was founded in 2015"
-Source: "The company was established in late 2015, though operations didn't begin until early 2016"
-Score: 0.6
-Reasoning: Technically correct but missing important context about when operations actually began. Could be misleading.
-
-EXAMPLE 5 - Poor Match (0.4):
-Claim: "The movie earned $500 million worldwide"
-Source: "Domestic box office reached $300 million, with international sales bringing the total to approximately $450 million"
-Score: 0.4
-Reasoning: Significant numerical discrepancy. Source says ~$450M, claim says $500M. The difference of $50M is substantial.
-
-EXAMPLE 6 - False (0.1):
-Claim: "The building is 50 stories tall"
-Source: "The 30-story tower dominates the skyline"
-Score: 0.1
-Reasoning: Directly contradicted. Source clearly states 30 stories, not 50.
-
-EXAMPLE 7 - No Evidence (0.0):
-Claim: "The restaurant has three Michelin stars"
-Source: [No mention of Michelin stars at all]
-Score: 0.0
-Reasoning: No supporting evidence found in sources. Cannot verify.
-
-Now apply these standards to the fact and excerpts provided."""
-
-
-# Prompt for when no excerpts are found
-SYSTEM_PROMPT_NO_EXCERPTS = """You are a fact-checking expert. In this case, NO relevant excerpts were found in the source documents for the claimed fact.
-
-When no excerpts are found, you must:
-1. Assign a score of 0.0 (cannot verify)
-2. State clearly that no supporting evidence was found
-3. Note that this doesn't necessarily mean the fact is false - just unverifiable from these sources
-4. Suggest the fact may be from a different source or misattributed
-
-Return format:
-{
-  "match_score": 0.0,
-  "assessment": "No supporting excerpts found in the provided sources. Unable to verify this claim from the given documents.",
-  "discrepancies": "Cannot verify - no relevant content found in sources",
-  "confidence": 0.95,
-  "reasoning": "The highlighter found no excerpts related to this fact. This could mean: (1) the fact is not mentioned in these sources, (2) the fact is from a different source, or (3) the source was not successfully scraped. Cannot assign a positive score without supporting evidence."
-}"""
-
-
-# Helper function to format excerpts for the prompt
-def format_excerpts_for_prompt(excerpts_dict):
-    """
-    Format excerpts dictionary into readable text for the prompt
-
-    Args:
-        excerpts_dict: {url: [excerpt_objects]}
-
-    Returns:
-        Formatted string
-    """
-    if not excerpts_dict or all(len(exs) == 0 for exs in excerpts_dict.values()):
-        return "NO EXCERPTS FOUND - No relevant content located in source documents."
-
-    formatted_parts = []
-    for url, excerpts in excerpts_dict.items():
-        if not excerpts:
-            continue
-
-        formatted_parts.append(f"\n=== SOURCE: {url} ===\n")
-        for i, excerpt in enumerate(excerpts, 1):
-            relevance = excerpt.get('relevance', 0.5)
-            quote = excerpt.get('quote', '')
-            context = excerpt.get('context', quote)
-
-            formatted_parts.append(f"Excerpt {i} (Relevance: {relevance}):")
-            formatted_parts.append(f"Quote: {quote}")
-            if context != quote:
-                formatted_parts.append(f"Context: {context}")
-            formatted_parts.append("")
-
-    return "\n".join(formatted_parts)

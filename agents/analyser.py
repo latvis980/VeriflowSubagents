@@ -1,7 +1,7 @@
 # agents/analyzer.py
 from langchain.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
-from langchain.output_parsers import JsonOutputParser
+from langchain_core.output_parsers import JsonOutputParser
 from langsmith import traceable
 from pydantic import BaseModel, Field
 from typing import List

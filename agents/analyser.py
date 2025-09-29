@@ -5,7 +5,9 @@ from langsmith import traceable
 from pydantic import BaseModel, Field
 from typing import List
 import time
+import json
 from langchain_core.output_parsers import JsonOutputParser
+from langchain.output_parsers import OutputFixingParser
 from prompts.analyzer_prompts import get_analyzer_prompts
 from utils.logger import fact_logger
 from utils.langsmith_config import langsmith_config
@@ -27,14 +29,24 @@ class FactAnalyzer:
     def __init__(self, config):
         self.config = config
 
-        # Create base LLM without JSON mode
+        # Create base LLM
         self.llm = ChatOpenAI(
             model="gpt-4o-mini",
             temperature=0
         )
 
-        # Use JsonOutputParser for reliable JSON parsing
-        self.parser = JsonOutputParser(pydantic_object=FactList)
+        # Create a fixing LLM (uses same model to fix errors)
+        self.fixing_llm = ChatOpenAI(
+            model="gpt-4o-mini",
+            temperature=0
+        )
+
+        # Use JsonOutputParser with OutputFixingParser wrapper
+        base_parser = JsonOutputParser(pydantic_object=FactList)
+        self.parser = OutputFixingParser.from_llm(
+            parser=base_parser,
+            llm=self.fixing_llm
+        )
 
         # Load prompts during initialization
         self.prompts = get_analyzer_prompts()
@@ -62,7 +74,7 @@ class FactAnalyzer:
         )
 
         try:
-            # Create prompt with format instructions from parser
+            # Create prompt with format instructions
             prompt = ChatPromptTemplate.from_messages([
                 ("system", self.prompts["system"]),
                 ("user", self.prompts["user"] + "\n\n{format_instructions}")
@@ -73,13 +85,13 @@ class FactAnalyzer:
                 format_instructions=self.parser.get_format_instructions()
             )
 
-            # Get callbacks for LangSmith (safe to call)
+            # Get callbacks for LangSmith
             callbacks = langsmith_config.get_callbacks("fact_analyzer")
 
-            # Create chain: prompt -> llm -> parser
+            # Create chain: prompt -> llm -> parser (with fixing)
             chain = prompt_with_format | self.llm | self.parser
 
-            fact_logger.logger.debug("🔗 Invoking LangChain with JsonOutputParser")
+            fact_logger.logger.debug("🔗 Invoking LangChain with OutputFixingParser")
 
             # Safe callback usage
             config = {}

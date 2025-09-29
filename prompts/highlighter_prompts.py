@@ -39,22 +39,22 @@ IMPORTANT:
 IMPORTANT: You MUST return valid JSON only. No other text or explanations.
 
 Return ONLY valid JSON in this exact format:
-{
+{{
   "excerpts": [
-    {
+    {{
       "quote": "The hotel officially opened its doors in March 2017, welcoming its first guests.",
       "context": "After years of construction, the hotel officially opened its doors in March 2017, welcoming its first guests. The grand opening ceremony was attended by local dignitaries.",
       "relevance": 0.95,
       "start_position": "paragraph 3"
-    },
-    {
+    }},
+    {{
       "quote": "Construction began in 2015 and finished two years later.",
       "context": "Construction began in 2015 and finished two years later. The project cost an estimated $50 million.",
       "relevance": 0.85,
       "start_position": "paragraph 1"
-    }
+    }}
   ]
-}"""
+}}"""
 
 USER_PROMPT = """Find ALL relevant excerpts that mention or relate to this fact.
 

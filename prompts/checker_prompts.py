@@ -61,13 +61,13 @@ BE STRICT BUT FAIR:
 IMPORTANT: You MUST return valid JSON only. No other text or explanations.
 
 Return ONLY valid JSON in this exact format:
-{
+{{
   "match_score": 0.95,
   "assessment": "The fact accurately represents the source. The hotel opening date of March 2017 is stated exactly as written in the source documents. The claim is direct, unambiguous, and fully supported.",
   "discrepancies": "none",
   "confidence": 0.90,
   "reasoning": "The source explicitly states 'officially opened its doors in March 2017', which directly supports the claimed fact. No ambiguity, no missing context, no contradictions found. High confidence in this assessment."
-}"""
+}}"""
 
 USER_PROMPT = """Evaluate the accuracy of this claimed fact against the source excerpts.
 

@@ -97,7 +97,7 @@ Output:
 WHAT TO EXTRACT:
 - Specific dates, numbers, statistics
 - Names of people, places, organizations
-- Historical events and details
+- Events and details
 - Product features and specifications
 - Comparisons and rankings
 - Definitive statements

@@ -85,6 +85,14 @@ class FactCheckOrchestrator:
                 f"📚 Combined content: {len(combined_content)} characters from all sources"
             )
 
+            # Step 4.5: Saving session content
+            fact_logger.logger.info("💾 Step 4.5: Saving session content")
+            self.file_manager.save_session_content(
+                session_id, 
+                all_scraped_content,
+                facts
+            )
+
             # Step 5: Check each fact against the combined content
             fact_logger.logger.info(f"⚖️ Step 5: Checking {len(facts)} facts against all sources")
             results = []

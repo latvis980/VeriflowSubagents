@@ -1,4 +1,4 @@
-# agents/fact_check_scraper.py
+# agents/browserless_scraper.py
 """
 Fact-Checking Web Scraper with Railway Browserless Integration
 Structure-preserving content extraction for source verification
@@ -204,26 +204,41 @@ class FactCheckScraper:
             # Initialize Playwright
             playwright = await async_playwright().start()
 
-            # Browser launch configuration
+            # 🔧 FIXED: Correct Railway Browserless connection
             if self.browserless_endpoint:
-                # Connect to Railway Browserless
-                browser = await playwright.chromium.connect(
-                    self.browserless_endpoint,
-                    timeout=self.browser_launch_timeout
-                )
-                fact_logger.logger.debug("Connected to Railway Browserless")
-            else:
-                # Launch local browser
-                browser = await playwright.webkit.launch(
+                # ✅ PROPER CONNECTION METHOD for Railway Browserless
+                try:
+                    fact_logger.logger.info(f"Connecting to Railway Browserless: {self.browserless_endpoint}")
+
+                    # Use chromium.connect() with the Railway endpoint
+                    browser = await playwright.chromium.connect(
+                        self.browserless_endpoint,
+                        timeout=self.browser_launch_timeout
+                    )
+                    fact_logger.logger.debug("✅ Successfully connected to Railway Browserless")
+
+                except Exception as browserless_error:
+                    fact_logger.logger.warning(
+                        f"❌ Railway Browserless connection failed: {browserless_error}"
+                    )
+                    fact_logger.logger.info("🔄 Falling back to local browser")
+                    browser = None
+
+            # Fallback to local browser if Railway connection fails
+            if not browser:
+                fact_logger.logger.info("🚀 Launching local browser")
+                browser = await playwright.chromium.launch(
                     headless=True,
                     args=[
                         "--no-sandbox",
                         "--disable-setuid-sandbox",
                         "--disable-dev-shm-usage",
                         "--disable-web-security",
+                        "--disable-blink-features=AutomationControlled",
+                        "--disable-features=VizDisplayCompositor"
                     ]
                 )
-                fact_logger.logger.debug("Launched local Playwright browser")
+                fact_logger.logger.debug("✅ Local browser launched successfully")
 
             # Create page with optimizations
             page = await browser.new_page()
@@ -288,7 +303,8 @@ class FactCheckScraper:
                 "Accept-Language": "en-US,en;q=0.5",
                 "Accept-Encoding": "gzip, deflate, br",
                 "Cache-Control": "no-cache",
-                "Pragma": "no-cache"
+                "Pragma": "no-cache",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
             })
 
             # Block unnecessary resources

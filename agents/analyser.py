@@ -1,4 +1,12 @@
-# agents/analyzer.py
+# analyzer.py
+"""
+Improved Fact Analyzer - Global Source Checking Approach
+Instead of mapping individual facts to specific sources, this approach:
+1. Extracts all facts from the content
+2. Scrapes ALL mentioned sources once
+3. Checks each fact against the combined source content
+"""
+
 from langchain.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import JsonOutputParser
@@ -7,127 +15,119 @@ from pydantic import BaseModel, Field
 from typing import List
 import time
 
-from prompts.analyzer_prompts import get_analyzer_prompts
-from utils.logger import fact_logger
-from utils.langsmith_config import langsmith_config
-
 class Fact(BaseModel):
     id: str
     statement: str
-    sources: List[str]
     original_text: str
     confidence: float
+    # Remove sources field - will be handled globally
 
 class AnalyzerOutput(BaseModel):
     facts: List[dict] = Field(description="List of extracted facts")
+    all_sources: List[str] = Field(description="All source URLs mentioned in the content")
 
 class FactAnalyzer:
-    """Extract factual claims with LangSmith tracing"""
+    """Extract factual claims without source mapping - check all facts against all sources"""
 
     def __init__(self, config):
         self.config = config
-
-        # ✅ PROPER JSON MODE - OpenAI guarantees valid JSON
         self.llm = ChatOpenAI(
             model="gpt-4o-mini",
             temperature=0
         ).bind(response_format={"type": "json_object"})
 
-        # ✅ SIMPLE PARSER - No fixing needed
         self.parser = JsonOutputParser(pydantic_object=AnalyzerOutput)
 
-        # Load prompts during initialization
-        self.prompts = get_analyzer_prompts()
-
-        fact_logger.log_component_start("FactAnalyzer", model="gpt-4o-mini")
-
-    @traceable(
-        name="analyze_facts",
-        run_type="chain",
-        tags=["fact-extraction", "analyzer"]
-    )
-    async def analyze(self, parsed_content: dict) -> List[Fact]:
+    @traceable(name="analyze_facts_global", run_type="chain")
+    async def analyze(self, parsed_content: dict) -> tuple[List[Fact], List[str]]:
         """
-        Extract facts with full LangSmith tracing
+        Extract facts and return all source URLs separately
+        Returns: (facts_list, all_source_urls)
         """
-        start_time = time.time()
 
-        fact_logger.logger.info(
-            "🔍 Starting fact analysis",
-            extra={
-                "text_length": len(parsed_content['text']),
-                "num_sources": len(parsed_content['links']),
-                "format": parsed_content.get('format', 'unknown')
-            }
+        system_prompt = """You are a fact extraction expert. Extract ALL factual claims from the content without trying to map them to specific sources.
+
+WHAT TO EXTRACT:
+- Specific dates, numbers, statistics, measurements
+- Names of people, places, organizations  
+- Historical events and their details
+- Claims about products, services, features
+- Comparisons and rankings
+- Statements about cause and effect
+- Definitive statements presented as facts
+
+WHAT TO IGNORE:
+- Opinions and subjective statements
+- Predictions about the future
+- Rhetorical questions
+- General advice or recommendations
+- Vague statements without specifics
+
+IMPORTANT: Extract facts independently of their sources. The source verification will happen separately.
+
+Return ONLY valid JSON in this exact format:
+{
+  "facts": [
+    {
+      "statement": "The hotel opened in March 2017",
+      "original_text": "The Silo Hotel opened in March 2017",
+      "confidence": 0.95
+    }
+  ],
+  "all_sources": ["https://source1.com", "https://source2.com"]
+}"""
+
+        user_prompt = """Extract all factual claims from the following content.
+
+TEXT TO ANALYZE:
+{text}
+
+AVAILABLE SOURCE URLS:
+{sources}
+
+INSTRUCTIONS:
+- Find every verifiable factual claim in the text
+- Extract facts without worrying about which source supports them
+- Be thorough - don't miss any facts
+- Keep statements precise and atomic
+- List all source URLs separately
+- Return valid JSON only
+
+{format_instructions}
+
+Extract all factual claims now."""
+
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_prompt),
+            ("user", user_prompt)
+        ])
+
+        prompt_with_format = prompt.partial(
+            format_instructions=self.parser.get_format_instructions()
         )
 
-        try:
-            # ✅ EXPLICIT JSON MENTION
-            system_prompt = self.prompts["system"] + "\n\nIMPORTANT: You MUST return valid JSON only. No other text."
+        chain = prompt_with_format | self.llm | self.parser
 
-            prompt = ChatPromptTemplate.from_messages([
-                ("system", system_prompt),
-                ("user", self.prompts["user"] + "\n\n{format_instructions}\n\nReturn your response as valid JSON.")
-            ])
+        response = await chain.ainvoke({
+            "text": parsed_content['text'],
+            "sources": self._format_sources(parsed_content['links'])
+        })
 
-            # ✅ FORMAT INSTRUCTIONS
-            prompt_with_format = prompt.partial(
-                format_instructions=self.parser.get_format_instructions()
+        # Convert to Fact objects
+        facts = []
+        for i, fact_data in enumerate(response.get('facts', [])):
+            fact = Fact(
+                id=f"fact{i+1}",
+                statement=fact_data['statement'],
+                original_text=fact_data.get('original_text', ''),
+                confidence=fact_data.get('confidence', 1.0)
             )
+            facts.append(fact)
 
-            # Get callbacks for LangSmith
-            callbacks = langsmith_config.get_callbacks("fact_analyzer")
+        # Get all source URLs
+        all_sources = response.get('all_sources', [])
 
-            # ✅ CLEAN CHAIN - No manual JSON parsing needed
-            chain = prompt_with_format | self.llm | self.parser
-
-            fact_logger.logger.debug("🔗 Invoking LangChain with enforced JSON mode")
-
-            response = await chain.ainvoke(
-                {
-                    "text": parsed_content['text'],
-                    "sources": self._format_sources(parsed_content['links'])
-                },
-                config={"callbacks": callbacks.handlers}
-            )
-
-            # ✅ DIRECT DICT ACCESS - Parser returns clean dict
-            facts_data = response
-
-            # Convert to Fact objects
-            facts = []
-            for i, fact_data in enumerate(facts_data.get('facts', [])):
-                fact = Fact(
-                    id=f"fact{i+1}",
-                    statement=fact_data['statement'],
-                    sources=fact_data['sources'],
-                    original_text=fact_data.get('original_text', ''),
-                    confidence=fact_data.get('confidence', 1.0)
-                )
-                facts.append(fact)
-
-                fact_logger.logger.debug(
-                    f"📝 Extracted fact {fact.id}",
-                    extra={
-                        "fact_id": fact.id,
-                        "statement": fact.statement[:100],
-                        "num_sources": len(fact.sources)
-                    }
-                )
-
-            duration = time.time() - start_time
-            fact_logger.log_component_complete(
-                "FactAnalyzer",
-                duration,
-                num_facts=len(facts),
-                avg_sources_per_fact=sum(len(f.sources) for f in facts) / len(facts) if facts else 0
-            )
-
-            return facts
-
-        except Exception as e:
-            fact_logger.log_component_error("FactAnalyzer", e)
-            raise
+        return facts, all_sources
 
     def _format_sources(self, links: List[dict]) -> str:
         """Format source links for the prompt"""

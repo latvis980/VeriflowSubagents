@@ -1,4 +1,4 @@
-# orchestrator/llm_output_orchestrator.py
+# improved_orchestrator.py
 """
 Improved Orchestrator - Global Source Checking Approach
 
@@ -19,9 +19,12 @@ from utils.file_manager import FileManager
 from utils.logger import fact_logger
 from utils.langsmith_config import langsmith_config
 
+# Import your existing components
 from agents.browserless_scraper import FactCheckScraper
 from agents.fact_checker import FactChecker
-from agents.analyser import FactAnalyzer
+
+# Import the improved analyzer
+from improved_analyzer import ImprovedFactAnalyzer
 
 class ImprovedFactCheckOrchestrator:
     """Orchestrator using global source checking approach"""
@@ -29,12 +32,12 @@ class ImprovedFactCheckOrchestrator:
     def __init__(self, config):
         self.config = config
         self.parser = HTMLParser()
-        self.analyzer = FactAnalyzer(config) 
+        self.analyzer = ImprovedFactAnalyzer(config)  # Use improved analyzer
         self.scraper = FactCheckScraper(config)
         self.checker = FactChecker(config)
         self.file_manager = FileManager()
 
-        fact_logger.log_component_start("FactCheckOrchestrator")
+        fact_logger.log_component_start("ImprovedFactCheckOrchestrator")
 
     @traceable(
         name="improved_fact_check_pipeline",
@@ -49,7 +52,7 @@ class ImprovedFactCheckOrchestrator:
         start_time = time.time()
 
         fact_logger.logger.info(
-            f"🚀 STARTING FACT-CHECK SESSION: {session_id}",
+            f"🚀 STARTING IMPROVED FACT-CHECK SESSION: {session_id}",
             extra={"session_id": session_id, "input_length": len(html_content)}
         )
 

@@ -35,12 +35,9 @@ class FactCheckScraper:
         self.browserless_endpoint = os.getenv('BROWSER_PLAYWRIGHT_ENDPOINT_PRIVATE')
 
         if self.browserless_endpoint:
-            fact_logger.logger.info(
-                "Railway Browserless endpoint configured",
-                extra={"endpoint": self.browserless_endpoint[:50]}
-            )
+            fact_logger.logger.info(f"🔗 Browserless endpoint: {self.browserless_endpoint[:50]}...")
         else:
-            fact_logger.logger.info("Running in local Playwright mode")
+            fact_logger.logger.warning("❌ No BROWSER_PLAYWRIGHT_ENDPOINT_PRIVATE found")
 
         # Timeout configuration
         self.default_timeout = 30000  # 30 seconds

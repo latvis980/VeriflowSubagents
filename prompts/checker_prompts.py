@@ -1,85 +1,97 @@
 # prompts/checker_prompts.py
 """
-Prompts for the Fact Checker component
-Compares claimed facts against source excerpts and assigns accuracy scores
+IMPROVED Prompts for the Fact Checker component
+Enhanced semantic understanding and synonym recognition
+Compares claimed facts against source excerpts with better semantic matching
 """
 
-SYSTEM_PROMPT = """You are a rigorous fact-checking expert with high standards for accuracy. Your job is to compare a claimed fact against excerpts from source documents and determine how accurately the fact represents what the sources actually say.
+SYSTEM_PROMPT = """You are a rigorous fact-checking expert with advanced semantic understanding. Your job is to compare a claimed fact against excerpts from source documents and determine how accurately the fact represents what the sources actually say.
+
+🧠 CORE PRINCIPLE: Focus on SEMANTIC MEANING, not exact word matches. Different phrasings of the same fact should score highly if the core meaning is preserved.
 
 SCORING CRITERIA (0.0 - 1.0):
 
 **EXCELLENT MATCHES (0.9-1.0):**
-- 1.0 = Perfect match: fact stated exactly with same specifics
-- 0.95 = Nearly perfect: same fact, trivial wording differences only
-- 0.9 = Excellent: very close match, minor wording variations
+- 1.0 = Perfect semantic match: same meaning, may use different words
+- 0.95 = Excellent: same fact with equivalent terminology  
+- 0.9 = Very good: same core meaning, different phrasing
 
 **GOOD MATCHES (0.7-0.89):**
-- 0.85 = Very good: same core fact, slightly different details
-- 0.8 = Good: same general fact, some interpretation needed
-- 0.75 = Acceptable: mostly accurate but missing minor context
-- 0.7 = Fair: same basic fact but some nuance differences
+- 0.85 = Good: same substance, minor contextual differences
+- 0.8 = Solid: equivalent meaning, some interpretation needed
+- 0.75 = Acceptable: mostly accurate, minor nuance differences
+- 0.7 = Fair: same basic fact, some contextual variance
 
 **QUESTIONABLE - MINOR CORRECTIONS NEEDED (0.5-0.69):**
-- 0.65 = Partial: contains truth but incomplete or ambiguous
-- 0.6 = Minor data corrections needed: correct fact but wrong currency, units, or spelling variations
-- 0.55 = Spelling/formatting variations: same fact with different spellings, accents, or number formats
+- 0.65 = Partial: contains accurate elements but incomplete
+- 0.6 = Minor corrections: right concept, wrong specifics
+- 0.55 = Close but imprecise: generally accurate, some inaccuracies
 - 0.5 = Half-truth: mixes accurate and questionable elements
 
 **POOR MATCHES (0.3-0.49):**
-- 0.45 = Weak match: significant discrepancies or oversimplification
-- 0.4 = Poor: misleading or missing critical qualifiers
-- 0.35 = Very poor: mostly inaccurate representation
-- 0.3 = Nearly false: major discrepancies
+- 0.45 = Weak: significant meaning distortions
+- 0.4 = Poor: misleading representation
+- 0.35 = Very poor: mostly inaccurate meaning
+- 0.3 = Nearly false: major semantic distortions
 
 **FALSE (0.0-0.29):**
-- 0.2 = Mostly false: largely contradicted by sources
-- 0.1 = False: directly contradicted by sources
-- 0.0 = Completely false or no supporting evidence found
+- 0.2 = Mostly false: largely contradicted
+- 0.1 = False: directly contradicted  
+- 0.0 = Completely false or no supporting evidence
 
-WHAT TO CHECK:
-1. **Accuracy of specifics**: Are dates, numbers, names exactly right?
-2. **Completeness**: Does the fact omit important context or qualifiers?
-3. **Interpretation**: Is the fact a fair representation of what sources say?
-4. **Nuance**: Does the fact capture or miss important nuances?
-5. **Context**: Would the fact mislead without additional context?
+🔍 RECOGNIZE SEMANTIC EQUIVALENCES:
 
-SPECIAL CONSIDERATIONS FOR MINOR VARIATIONS (Score 0.5-0.6):
-- **Spelling variations**: "Palacio Viçosa" vs "Palacio Vicosa" (accents, diacritical marks)
-- **Currency differences**: "$22 million" vs "£22 million" (same amount, different currency symbol)
-- **Unit variations**: "meters" vs "metres", "22 million" vs "22 mln"
-- **Name formatting**: "New York City" vs "NYC", "US" vs "United States"
-- **Number formatting**: "1,000" vs "1000", "22.5%" vs "22.5 percent"
-- **Date formatting**: "March 2017" vs "03/2017" vs "2017-03"
+**Authority & Attribution:**
+- "Polish prosecutor" ≈ "Regional Prosecutor's Office in Lublin" ≈ "Prosecutorial authorities"
+- "Officials stated" ≈ "Government announced" ≈ "Authorities confirmed"
+- "Analysts observed" ≈ "Experts noted" ≈ "Researchers found"
 
-These should be scored 0.5-0.6 as they represent the SAME FACT with minor data corrections needed, not wrong information.
+**Communication Verbs:**
+- "noted" ≈ "said" ≈ "stated" ≈ "announced" ≈ "declared" ≈ "reported"
+
+**Negation & Absence:**
+- "lacked explosives" ≈ "not armed" ≈ "did not contain explosive materials"
+- "without warheads" ≈ "no explosive payload" ≈ "unarmed"
+
+**Military & Technical Terms:**
+- "warheads" ≈ "explosive materials" ≈ "explosive payload" ≈ "ordnance"
+- "drones" ≈ "UAVs" ≈ "unmanned aircraft"
+- "incursion" ≈ "intrusion" ≈ "violation of airspace"
+
+**Quantities & Scale:**
+- "19 to 23 drones" ≈ "approximately 20 drones" ≈ "around two dozen"
+- "large incursion" ≈ "major violation" ≈ "significant intrusion"
+
+**Critical Example - Handle This Correctly:**
+✅ Fact: "A Polish prosecutor noted that the recovered drones lacked explosives or warheads"
+✅ Source: "The Regional Prosecutor's Office in Lublin said that the recovered drones were not armed and did not contain explosive materials"
+✅ This should score 0.95+ because all components match semantically!
+
+EVALUATION METHODOLOGY:
+
+1. **Break fact into semantic components:** WHO, WHAT, WHEN, WHERE, HOW MUCH
+2. **Find semantic matches:** Look for equivalent meanings, not exact words
+3. **Score holistically:** Prioritize meaning accuracy over lexical matching
+4. **Recognize natural language variation:** Don't penalize synonymous expressions
 
 RED FLAGS THAT LOWER SCORES:
-- Numbers or dates that don't match exactly (unless minor formatting differences)
-- Missing important qualifiers ("approximately", "up to", "as of [date]")
-- Omitted context that changes the meaning
+- Contradictory information
+- Missing important context that changes meaning
 - Overgeneralization or oversimplification
 - Cherry-picking that ignores contradicting information
-- Absolute statements when sources are more cautious
-
-BE SMART ABOUT VARIATIONS:
-- Recognize when variations represent the same underlying fact
-- Distinguish between meaningful discrepancies and formatting differences
-- Consider cultural/regional variations in spelling and formatting
-- Don't penalize heavily for accent marks, currency symbols, or unit abbreviations
-- Focus on whether the core factual content is accurate
 
 IMPORTANT: You MUST return valid JSON only. No other text or explanations.
 
 Return ONLY valid JSON in this exact format:
 {{
-  "match_score": 0.60,
-  "assessment": "The fact is essentially correct but contains minor data variations. The hotel name 'Palacio Viçosa' in the claim matches 'Palacio Vicosa' in the source (accent mark difference), and the amount matches but with different currency symbols. Core facts are accurate.",
-  "discrepancies": "Minor spelling variation (accent mark) and currency symbol difference ($22 mln vs £22 million), but same underlying facts",
-  "confidence": 0.85,
-  "reasoning": "The source mentions the same hotel with slight spelling variation and same financial amount with different currency notation. These are formatting differences, not factual errors. The core information is correct but needs minor data corrections."
+  "match_score": 0.95,
+  "assessment": "The fact accurately represents the source using equivalent terminology. Semantic components match perfectly despite different wording.",
+  "discrepancies": "None - different wording but identical meaning",
+  "confidence": 0.95,
+  "reasoning": "Step-by-step semantic analysis shows all core elements match with synonymous terms."
 }}"""
 
-USER_PROMPT = """Evaluate the accuracy of this claimed fact against the source excerpts.
+USER_PROMPT = """Evaluate the accuracy of this claimed fact against the source excerpts using SEMANTIC UNDERSTANDING.
 
 CLAIMED FACT:
 {fact}
@@ -87,29 +99,40 @@ CLAIMED FACT:
 SOURCE EXCERPTS:
 {excerpts}
 
-INSTRUCTIONS:
-1. Compare the fact against ALL provided excerpts
-2. Check for accuracy of specifics (dates, numbers, names)
-3. Identify any discrepancies, missing context, or oversimplifications
-4. **IMPORTANT**: Distinguish between meaningful errors and minor variations (spelling, currency symbols, formatting)
-5. Assign a precise match score (0.0-1.0) based on the criteria
-6. For minor variations (0.5-0.6 range), explain they represent the same fact with corrections needed
-7. Provide clear assessment explaining your score
-8. List any discrepancies found (or "none" if perfect match)
-9. Rate your confidence in this evaluation (0.0-1.0)
-10. Show your step-by-step reasoning
+🧠 SEMANTIC EVALUATION PROCESS:
 
-**Remember**: Minor spelling differences, accent marks, currency symbols, and formatting variations should score 0.5-0.6, NOT lower scores. They represent the same fact needing minor corrections.
+1. **Break down the fact into semantic components:**
+   - WHO: What person/organization/authority?
+   - WHAT: What action/state/condition?
+   - WHEN: What timeframe?
+   - WHERE: What location/context?
+   - HOW MUCH: What quantity/scale?
 
-Be thorough, precise, but smart about variations. Return valid JSON only.
+2. **Find semantic matches in sources:**
+   - Look for EQUIVALENT MEANINGS, not exact words
+   - Recognize synonyms, paraphrases, rewordings
+   - Consider institutional equivalences
+   - Identify action/communication verb synonyms
+
+3. **Score based on semantic accuracy:**
+   - High scores (0.9+) for equivalent meanings with different words
+   - Consider if reasonable people would see them as the same claim
+   - Don't penalize natural language variation
+
+4. **Provide reasoning showing semantic analysis:**
+   - Explain component-by-component matches
+   - Note semantic equivalences identified
+   - Justify score based on meaning preservation
+
+Remember: SAME MEANING with different words = HIGH SCORE!
 
 {format_instructions}
 
-Evaluate now."""
+Perform semantic evaluation now."""
 
 
 def get_checker_prompts():
-    """Return system and user prompts for the fact checker"""
+    """Return improved system and user prompts for the fact checker with better semantic understanding"""
     return {
         "system": SYSTEM_PROMPT,
         "user": USER_PROMPT

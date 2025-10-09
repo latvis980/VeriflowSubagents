@@ -20,11 +20,16 @@ class Config:
     def __init__(self):
         self.openai_api_key = os.getenv('OPENAI_API_KEY')
         self.browserless_endpoint = os.getenv('BROWSER_PLAYWRIGHT_ENDPOINT_PRIVATE')
+        self.tavily_api_key = os.getenv('TAVILY_API_KEY')  # ✅ ADD THIS LINE
         self.langchain_project = os.getenv('LANGCHAIN_PROJECT', 'fact-checker')
 
         # Validate required env vars
         if not self.openai_api_key:
             raise ValueError("OPENAI_API_KEY not set in environment")
+
+        # ✅ ADD THIS VALIDATION
+        if not self.tavily_api_key:
+            raise ValueError("TAVILY_API_KEY not set in environment")
 
         fact_logger.logger.info("✅ Configuration loaded successfully")
 

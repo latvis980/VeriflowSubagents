@@ -8,6 +8,9 @@ langchain>=0.3.0,<0.4.0
 # LangChain OpenAI Integration - Version 0.3.x  
 langchain-openai>=0.3.0,<0.4.0
 
+# Web search
+tavily-python>=0.3.0
+
 # Web scraping
 playwright==1.41.0
 beautifulsoup4==4.12.3

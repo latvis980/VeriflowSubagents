@@ -304,7 +304,8 @@ class WebSearchOrchestrator:
             self.file_manager.save_session_content(
                 session_id,
                 all_scraped_content,
-                facts
+                facts,
+                upload_to_drive=True  # ✅ Enable Google Drive upload
             )
 
             # ===== Generate Summary =====

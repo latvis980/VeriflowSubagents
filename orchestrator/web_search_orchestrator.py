@@ -363,6 +363,181 @@ class WebSearchOrchestrator:
             )
             raise
 
+    async def process_with_progress(self, text_content: str, job_id: str) -> dict:
+        """Process with real-time progress updates"""
+        from utils.job_manager import job_manager
+
+        session_id = self.file_manager.create_session()
+        start_time = time.time()
+
+        try:
+            # Step 1: Extract Facts
+            job_manager.add_progress(job_id, "📄 Extracting facts from text...")
+
+            parsed_input = {
+                'text': text_content,
+                'links': [],
+                'format': 'plain_text'
+            }
+
+            facts, _ = await self.analyzer.analyze(parsed_input)
+
+            if not facts:
+                job_manager.add_progress(job_id, "⚠️ No verifiable facts found")
+                return self._create_empty_result(session_id, "No verifiable facts found in text")
+
+            job_manager.add_progress(job_id, f"✅ Extracted {len(facts)} facts")
+
+            # Step 2: Generate Search Queries
+            job_manager.add_progress(job_id, "🔍 Generating search queries...")
+
+            all_queries_by_fact = {}
+            for fact in facts:
+                queries = await self.query_generator.generate_queries(fact)
+                all_queries_by_fact[fact.id] = queries
+
+            total_queries = sum(len(q.all_queries) for q in all_queries_by_fact.values())
+            job_manager.add_progress(job_id, f"✅ Generated {total_queries} search queries")
+
+            # Step 3: Execute Web Searches
+            job_manager.add_progress(job_id, "🌐 Searching the web...")
+
+            search_results_by_fact = {}
+            for i, fact in enumerate(facts, 1):
+                job_manager.add_progress(
+                    job_id,
+                    f"🔎 Searching for fact {i}/{len(facts)}: \"{fact.statement[:60]}...\""
+                )
+
+                queries = all_queries_by_fact[fact.id]
+                search_results = await self.searcher.search_multiple(
+                    queries=queries.all_queries,
+                    search_depth="advanced",
+                    max_concurrent=3
+                )
+                search_results_by_fact[fact.id] = search_results
+
+            job_manager.add_progress(job_id, "✅ Web searches complete")
+
+            # Step 4: Filter by Credibility
+            job_manager.add_progress(job_id, "⭐ Filtering sources by credibility...")
+
+            credible_urls_by_fact = {}
+            credibility_results_by_fact = {}
+
+            for fact in facts:
+                all_results_for_fact = []
+                for query, results in search_results_by_fact[fact.id].items():
+                    all_results_for_fact.extend(results.results)
+
+                if not all_results_for_fact:
+                    credible_urls_by_fact[fact.id] = []
+                    continue
+
+                credibility_results = await self.credibility_filter.evaluate_sources(
+                    fact=fact,
+                    search_results=all_results_for_fact
+                )
+                credibility_results_by_fact[fact.id] = credibility_results
+
+                credible_urls = credibility_results.get_top_sources(self.max_sources_per_fact)
+                credible_urls_by_fact[fact.id] = [s.url for s in credible_urls]
+
+            total_credible = sum(len(urls) for urls in credible_urls_by_fact.values())
+            job_manager.add_progress(job_id, f"✅ Found {total_credible} credible sources")
+
+            # Step 5: Scrape Sources
+            job_manager.add_progress(job_id, f"🌐 Scraping {total_credible} sources...")
+
+            scraped_content_by_fact = {}
+            for fact in facts:
+                urls_to_scrape = credible_urls_by_fact.get(fact.id, [])
+                if urls_to_scrape:
+                    scraped_content = await self.scraper.scrape_urls_for_facts(urls_to_scrape)
+                    scraped_content_by_fact[fact.id] = scraped_content
+
+            job_manager.add_progress(job_id, "✅ Scraping complete")
+
+            # Step 6: Verify Facts
+            results = []
+            for i, fact in enumerate(facts, 1):
+                job_manager.add_progress(
+                    job_id,
+                    f"⚖️ Verifying fact {i}/{len(facts)}: \"{fact.statement[:60]}...\"",
+                    {'fact_id': fact.id, 'progress': f"{i}/{len(facts)}"}
+                )
+
+                scraped_content = scraped_content_by_fact.get(fact.id, {})
+
+                if not scraped_content or not any(scraped_content.values()):
+                    from agents.fact_checker import FactCheckResult
+                    result = FactCheckResult(
+                        fact_id=fact.id,
+                        statement=fact.statement,
+                        match_score=0.0,
+                        assessment="Unable to verify - no credible sources found",
+                        discrepancies="No sources available for verification",
+                        confidence=0.0,
+                        reasoning="Web search did not yield credible sources"
+                    )
+                    results.append(result)
+                    job_manager.add_progress(job_id, f"⚠️ {fact.id}: No sources found")
+                    continue
+
+                from agents.highlighter import Highlighter
+                highlighter = Highlighter(self.config)
+
+                excerpts = await highlighter.highlight(fact, scraped_content)
+                check_result = await self.checker.check_fact(fact, excerpts)
+                results.append(check_result)
+
+                emoji = "✅" if check_result.match_score >= 0.9 else "⚠️" if check_result.match_score >= 0.7 else "❌"
+                job_manager.add_progress(
+                    job_id,
+                    f"{emoji} {fact.id}: Score {check_result.match_score:.2f}"
+                )
+
+            results.sort(key=lambda x: x.match_score)
+
+            # Save
+            job_manager.add_progress(job_id, "💾 Saving results...")
+            all_scraped_content = {}
+            for fact_scraped in scraped_content_by_fact.values():
+                all_scraped_content.update(fact_scraped)
+
+            self.file_manager.save_session_content(
+                session_id,
+                all_scraped_content,
+                facts,
+                upload_to_drive=True
+            )
+
+            summary = self._generate_summary(results)
+            duration = time.time() - start_time
+
+            return {
+                "session_id": session_id,
+                "facts": [r.dict() for r in results],
+                "summary": summary,
+                "duration": duration,
+                "methodology": "web_search_verification",
+                "statistics": {
+                    "total_searches": total_queries,
+                    "total_sources_found": sum(
+                        sum(len(r.results) for r in sr.values())
+                        for sr in search_results_by_fact.values()
+                    ),
+                    "credible_sources_identified": total_credible,
+                    "sources_scraped": len(all_scraped_content),
+                    "successful_scrapes": len([c for c in all_scraped_content.values() if c])
+                },
+                "langsmith_url": f"https://smith.langchain.com/projects/p/{langsmith_config.project_name}"
+            }
+
+        except Exception as e:
+            job_manager.add_progress(job_id, f"❌ Error: {str(e)}")
+            raise
+
     def _generate_summary(self, results: list) -> dict:
         """Generate summary statistics"""
         if not results:

@@ -388,6 +388,18 @@ section {
     font-size: 0.9rem;
 }
 
+.score-badge.critical {
+    background: var(--critical-color);
+    color: white;
+    font-weight: 700;
+    animation: badgePulse 2s ease-in-out infinite;
+}
+
+@keyframes badgePulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+}
+
 .score-badge.accurate {
     background: var(--success-color);
     color: white;

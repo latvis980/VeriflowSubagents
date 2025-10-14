@@ -1,4 +1,4 @@
-// static/app.js - Updated with pipeline detection
+// static/app.js - Real-time progress streaming version
 
 // DOM Elements
 const htmlInput = document.getElementById('htmlInput');
@@ -14,6 +14,7 @@ const retryBtn = document.getElementById('retryBtn');
 
 // State
 let currentResults = null;
+let activeEventSource = null;
 
 // Event Listeners
 checkBtn.addEventListener('click', handleCheckFacts);
@@ -35,87 +36,137 @@ htmlInput.addEventListener('keydown', (e) => {
 async function handleCheckFacts() {
     const htmlContent = htmlInput.value.trim();
 
-    // Validation
     if (!htmlContent) {
         showError('Please paste some content to check.');
         return;
     }
 
-    // Show loading state
+    // Close any existing stream
+    if (activeEventSource) {
+        activeEventSource.close();
+        activeEventSource = null;
+    }
+
     setLoadingState(true);
     hideAllSections();
     showSection(statusSection);
-
-    // ✅ NEW: Detect and show pipeline
-    const detectedFormat = detectInputFormat(htmlContent);
-    updateStatusWithPipeline(detectedFormat);
+    updateStatus('Starting...', 'Initializing fact-check process...');
 
     try {
-        // Call API
-        const response = await fetch('/api/check', {
+        // Start the job
+        const startResponse = await fetch('/api/check', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                html_content: htmlContent
-            })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ html_content: htmlContent })
         });
 
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.message || `Server error: ${response.status}`);
+        if (!startResponse.ok) {
+            const errorData = await startResponse.json();
+            throw new Error(errorData.message || `Server error: ${startResponse.status}`);
         }
 
-        const results = await response.json();
-        currentResults = results;
+        const { job_id } = await startResponse.json();
+        console.log('Job started:', job_id);
 
-        // ✅ NEW: Log which pipeline was used
-        if (results.input_format) {
-            console.log(`Pipeline used: ${results.methodology} (Format: ${results.input_format})`);
-        }
+        // Stream progress and wait for completion
+        const result = await streamJobProgress(job_id);
 
-        // Show results
-        displayResults(results);
+        currentResults = result;
+        displayResults(result);
 
     } catch (error) {
         console.error('Error checking facts:', error);
         showError(error.message || 'An unexpected error occurred. Please try again.');
     } finally {
         setLoadingState(false);
+        if (activeEventSource) {
+            activeEventSource.close();
+            activeEventSource = null;
+        }
     }
 }
 
 /**
- * ✅ NEW: Detect input format (client-side preview)
+ * Stream real-time progress using Server-Sent Events
  */
-function detectInputFormat(content) {
-    const htmlPattern = /<\s*[a-z][^>]*>/i;
-    const linkPattern = /<\s*a\s+[^>]*href\s*=/i;
+function streamJobProgress(jobId) {
+    return new Promise((resolve, reject) => {
+        const eventSource = new EventSource(`/api/job/${jobId}/stream`);
+        activeEventSource = eventSource;
+        let progressLog = [];
 
-    if (htmlPattern.test(content) || linkPattern.test(content)) {
-        return 'html';
-    }
-    return 'text';
+        eventSource.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+
+                // Check if done
+                if (data.done) {
+                    eventSource.close();
+                    activeEventSource = null;
+
+                    // Fetch final result
+                    fetch(`/api/job/${jobId}`)
+                        .then(res => res.json())
+                        .then(jobData => {
+                            if (jobData.status === 'completed') {
+                                resolve(jobData.result);
+                            } else {
+                                reject(new Error(jobData.error || 'Job failed'));
+                            }
+                        })
+                        .catch(err => reject(err));
+                    return;
+                }
+
+                // Display progress
+                if (data.message) {
+                    progressLog.push(data.message);
+                    updateProgressDisplay(data.message, progressLog);
+                }
+            } catch (err) {
+                console.error('Error parsing progress:', err);
+            }
+        };
+
+        eventSource.onerror = (error) => {
+            console.error('EventSource error:', error);
+            eventSource.close();
+            activeEventSource = null;
+            reject(new Error('Connection lost. Please try again.'));
+        };
+
+        // Timeout after 10 minutes
+        setTimeout(() => {
+            if (activeEventSource === eventSource) {
+                eventSource.close();
+                activeEventSource = null;
+                reject(new Error('Request timeout after 10 minutes'));
+            }
+        }, 600000);
+    });
 }
 
 /**
- * ✅ NEW: Update status message with pipeline info
+ * Update progress display with scrolling log
  */
-function updateStatusWithPipeline(format) {
+function updateProgressDisplay(latestMessage, fullLog) {
+    const statusTitle = document.getElementById('statusTitle');
     const statusMessage = document.getElementById('statusMessage');
 
-    if (format === 'html') {
-        updateStatus(
-            'Processing with LLM Output Pipeline...', 
-            '🔗 Detected HTML with links - Verifying against provided sources'
-        );
-    } else {
-        updateStatus(
-            'Processing with Web Search Pipeline...', 
-            '🔍 Detected plain text - Searching and verifying from web sources'
-        );
-    }
+    statusTitle.textContent = 'Processing...';
+
+    // Show latest message prominently
+    const recentMessages = fullLog.slice(-10).reverse();
+
+    statusMessage.innerHTML = `
+        <div style="font-weight: 600; font-size: 1.1em; margin-bottom: 1rem; color: var(--text-primary);">
+            ${escapeHtml(latestMessage)}
+        </div>
+        <div style="max-height: 250px; overflow-y: auto; font-size: 0.9em; opacity: 0.85; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+            <div style="font-weight: 600; margin-bottom: 0.5rem; font-size: 0.85em; text-transform: uppercase; color: var(--text-secondary);">Recent Activity</div>
+            ${recentMessages.map(msg => `<div style="padding: 0.25rem 0;">• ${escapeHtml(msg)}</div>`).join('')}
+        </div>
+    `;
 }
 
 /**
@@ -134,7 +185,13 @@ function displayResults(results) {
     document.getElementById('sessionId').textContent = results.session_id;
     document.getElementById('duration').textContent = `${results.duration.toFixed(1)}s`;
 
-    // ✅ NEW: Show pipeline info in summary
+    // Show pipeline info
+    const summaryCard = document.querySelector('.summary-card');
+    const existingPipelineInfo = summaryCard.querySelector('.pipeline-info');
+    if (existingPipelineInfo) {
+        existingPipelineInfo.remove();
+    }
+
     const pipelineInfo = document.createElement('div');
     pipelineInfo.className = 'pipeline-info';
     pipelineInfo.style.cssText = 'margin-top: 1rem; padding: 0.75rem; background: rgba(255,255,255,0.15); border-radius: 6px; font-size: 0.9rem;';
@@ -147,15 +204,14 @@ function displayResults(results) {
         <strong>Pipeline Used:</strong> ${pipelineName}
         ${results.statistics ? `
             <div style="margin-top: 0.5rem; font-size: 0.85rem; opacity: 0.9;">
-                Searches: ${results.statistics.total_searches || 0} • 
-                Sources Found: ${results.statistics.total_sources_found || 0} • 
-                Credible: ${results.statistics.credible_sources_identified || 0} • 
-                Scraped: ${results.statistics.sources_scraped || 0}
+                ${results.statistics.total_searches ? `Searches: ${results.statistics.total_searches} • ` : ''}
+                ${results.statistics.total_sources_found ? `Sources Found: ${results.statistics.total_sources_found} • ` : ''}
+                ${results.statistics.credible_sources_identified ? `Credible: ${results.statistics.credible_sources_identified} • ` : ''}
+                Sources Scraped: ${results.statistics.sources_scraped || results.total_sources_scraped || 0}
             </div>
         ` : ''}
     `;
 
-    const summaryCard = document.querySelector('.summary-card');
     summaryCard.appendChild(pipelineInfo);
 
     // Update LangSmith link
@@ -163,7 +219,7 @@ function displayResults(results) {
         document.getElementById('langsmithUrl').href = results.langsmith_url;
     }
 
-    // Display facts (already sorted by backend - lowest score first)
+    // Display facts
     displayFacts(results.facts);
 
     // Scroll to results
@@ -196,7 +252,7 @@ function displayFacts(facts) {
     `;
     factsList.appendChild(sortingHeader);
 
-    // Display facts in order from backend
+    // Display facts
     facts.forEach((fact, index) => {
         const factCard = createFactCard(fact, index);
         factsList.appendChild(factCard);
@@ -209,6 +265,7 @@ function displayFacts(facts) {
 function createFactCard(fact, index) {
     const card = document.createElement('div');
     card.className = `fact-card ${getScoreClass(fact.match_score)}`;
+    card.setAttribute('data-score', fact.match_score.toFixed(2));
 
     const scoreEmoji = getScoreEmoji(fact.match_score);
     const priorityIndicator = getPriorityIndicator(fact.match_score, index);
@@ -217,7 +274,7 @@ function createFactCard(fact, index) {
         <div class="fact-header">
             <span class="fact-id">${priorityIndicator}${fact.fact_id}</span>
             <div class="fact-score">
-                <span class="score-badge ${getScoreClass(fact.match_score)}">
+                <span class="score-badge ${getScoreBadgeClass(fact.match_score)}">
                     ${scoreEmoji} ${fact.match_score.toFixed(2)}
                 </span>
             </div>
@@ -232,7 +289,7 @@ function createFactCard(fact, index) {
             ${escapeHtml(fact.assessment)}
         </div>
 
-        ${fact.discrepancies && fact.discrepancies !== 'none' ? `
+        ${fact.discrepancies && fact.discrepancies !== 'none' && fact.discrepancies.toLowerCase() !== 'none' ? `
             <div class="fact-discrepancies">
                 <div class="fact-discrepancies-label">⚠️ Discrepancies</div>
                 ${escapeHtml(fact.discrepancies)}
@@ -241,10 +298,10 @@ function createFactCard(fact, index) {
 
         ${fact.reasoning ? `
             <details style="margin-top: 1rem;">
-                <summary style="cursor: pointer; font-weight: 600; color: var(--text-secondary);">
-                    View Reasoning
+                <summary style="cursor: pointer; font-weight: 600; color: var(--text-secondary); user-select: none;">
+                    View Detailed Reasoning
                 </summary>
-                <div style="margin-top: 0.5rem; padding: 1rem; background: white; border-radius: 6px; border: 1px solid var(--border-color);">
+                <div style="margin-top: 0.75rem; padding: 1rem; background: white; border-radius: 6px; border: 1px solid var(--border-color); font-size: 0.95em; line-height: 1.6;">
                     ${escapeHtml(fact.reasoning)}
                 </div>
             </details>
@@ -275,6 +332,16 @@ function getScoreClass(score) {
     if (score >= 0.9) return 'accurate';
     if (score >= 0.7) return 'good';
     return 'questionable';
+}
+
+/**
+ * Get score badge class (includes critical)
+ */
+function getScoreBadgeClass(score) {
+    if (score >= 0.9) return 'accurate';
+    if (score >= 0.7) return 'good';
+    if (score >= 0.5) return 'questionable';
+    return 'critical';
 }
 
 /**
@@ -395,10 +462,8 @@ function escapeHtml(text) {
  * Initialize app
  */
 function init() {
-    console.log('Fact Checker initialized - Dual pipeline support enabled');
+    console.log('Fact Checker initialized - Real-time progress streaming enabled');
     htmlInput.focus();
-
-    // Check health endpoint
     checkHealth();
 }
 
@@ -411,7 +476,6 @@ async function checkHealth() {
         const data = await response.json();
         console.log('Health check:', data);
 
-        // ✅ NEW: Show pipeline availability in console
         if (data.pipelines) {
             console.log('Available pipelines:', {
                 'LLM Output (with links)': data.pipelines.llm_output,

@@ -149,6 +149,86 @@ class FactCheckOrchestrator:
             fact_logger.log_component_error("FactCheckOrchestrator", e, session_id=session_id)
             raise
 
+    # orchestrator/llm_output_orchestrator.py - Add progress method
+
+    async def process_with_progress(self, html_content: str, job_id: str) -> dict:
+        """Process with real-time progress updates"""
+        from utils.job_manager import job_manager
+
+        session_id = self.file_manager.create_session()
+        start_time = time.time()
+
+        try:
+            # Step 1: Parse
+            job_manager.add_progress(job_id, "📄 Parsing HTML input...")
+            parsed = await self._traced_parse(html_content)
+
+            # Step 2: Extract facts
+            job_manager.add_progress(job_id, "🔍 Extracting verifiable facts...")
+            facts, all_source_urls = await self.analyzer.analyze(parsed)
+            job_manager.add_progress(
+                job_id, 
+                f"✅ Found {len(facts)} facts from {len(all_source_urls)} sources"
+            )
+
+            # Step 3: Scrape sources
+            unique_urls = list(set(all_source_urls))
+            job_manager.add_progress(
+                job_id, 
+                f"🌐 Scraping {len(unique_urls)} sources..."
+            )
+
+            all_scraped_content = await self.scraper.scrape_urls_for_facts(unique_urls)
+            successful_scrapes = len([v for v in all_scraped_content.values() if v])
+            job_manager.add_progress(
+                job_id,
+                f"✅ Scraped {successful_scrapes}/{len(unique_urls)} sources"
+            )
+
+            # Step 4: Verify each fact
+            results = []
+            for i, fact in enumerate(facts, 1):
+                job_manager.add_progress(
+                    job_id,
+                    f"⚖️ Verifying fact {i}/{len(facts)}: \"{fact.statement[:60]}...\"",
+                    {'fact_id': fact.id, 'progress': f"{i}/{len(facts)}"}
+                )
+
+                excerpts = await self._extract_relevant_excerpts_semantic(fact, all_scraped_content)
+                check_result = await self.checker.check_fact(fact, excerpts)
+                results.append(check_result)
+
+                # Show result
+                emoji = "✅" if check_result.match_score >= 0.9 else "⚠️" if check_result.match_score >= 0.7 else "❌"
+                job_manager.add_progress(
+                    job_id,
+                    f"{emoji} {fact.id}: Score {check_result.match_score:.2f}"
+                )
+
+            results.sort(key=lambda x: x.match_score)
+
+            # Save and finish
+            job_manager.add_progress(job_id, "💾 Saving results...")
+            self.file_manager.save_session_content(session_id, all_scraped_content, facts, upload_to_drive=True)
+
+            summary = self._generate_summary(results)
+            duration = time.time() - start_time
+
+            return {
+                "session_id": session_id,
+                "facts": [r.dict() for r in results],
+                "summary": summary,
+                "duration": duration,
+                "total_sources_scraped": len(unique_urls),
+                "successful_scrapes": successful_scrapes,
+                "methodology": "global_source_checking_semantic",
+                "langsmith_url": f"https://smith.langchain.com/projects/p/{langsmith_config.project_name}"
+            }
+
+        except Exception as e:
+            job_manager.add_progress(job_id, f"❌ Error: {str(e)}")
+            raise
+
     async def _extract_relevant_excerpts_semantic(
         self, 
         fact, 

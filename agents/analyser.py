@@ -43,7 +43,7 @@ class FactAnalyzer:
         self.tokens_per_char = 0.25     # Rough estimate: 4 chars per token
         self.max_input_chars = int(self.max_input_tokens / self.tokens_per_char)
 
-        fact_logger.log_component_start("FactAnalyzer", model="gpt-4o")
+        fact_logger.log_component_start("FactAnalyzer", model="gpt-4o-mini")
 
     @traceable(
         name="analyze_facts",
@@ -125,15 +125,23 @@ class FactAnalyzer:
 
         fact_logger.logger.debug("🔗 Invoking LangChain with global approach (single pass)")
 
-        response = await chain.ainvoke(
-            {
-                "text": parsed_content['text'],
-                "sources": self._format_sources(parsed_content['links'])
-            },
-            config={"callbacks": callbacks.handlers}
-        )
+        try:
+            response = await chain.ainvoke(
+                {
+                    "text": parsed_content['text'],
+                    "sources": self._format_sources(parsed_content['links'])
+                },
+                config={"callbacks": callbacks.handlers}
+            )
 
-        return self._process_response(response, parsed_content)
+            return self._process_response(response, parsed_content)
+
+        except Exception as e:
+            fact_logger.logger.error(f"❌ LLM invocation failed: {e}")
+            # Log the actual error for debugging
+            import traceback
+            fact_logger.logger.error(f"Traceback: {traceback.format_exc()}")
+            raise
 
     async def _analyze_with_chunking(self, parsed_content: dict) -> tuple[List[Fact], List[str]]:
         """Analyze large content by splitting into chunks"""
@@ -247,25 +255,40 @@ class FactAnalyzer:
     def _process_response(self, response: dict, parsed_content: dict) -> tuple[List[Fact], List[str]]:
         """Convert response to Fact objects and extract sources"""
 
+        # ✅ CHECK FOR ERROR IN RESPONSE
+        if 'error' in response:
+            error_msg = response.get('error', 'Unknown error')
+            fact_logger.logger.error(f"❌ LLM returned error: {error_msg}")
+            raise ValueError(f"LLM error: {error_msg}")
+
+        # ✅ ENSURE WE HAVE FACTS KEY
+        if 'facts' not in response:
+            fact_logger.logger.error(f"❌ Missing 'facts' in response: {response}")
+            raise ValueError(f"Invalid response structure: missing 'facts' key. Got: {list(response.keys())}")
+
         # Convert to Fact objects (sources will be empty for global approach)
         facts = []
         for i, fact_data in enumerate(response.get('facts', [])):
-            fact = Fact(
-                id=f"fact{i+1}",
-                statement=fact_data['statement'],
-                sources=[],  # Empty for global approach - sources handled separately
-                original_text=fact_data.get('original_text', ''),
-                confidence=fact_data.get('confidence', 1.0)
-            )
-            facts.append(fact)
+            try:
+                fact = Fact(
+                    id=f"fact{i+1}",
+                    statement=fact_data['statement'],
+                    sources=[],  # Empty for global approach - sources handled separately
+                    original_text=fact_data.get('original_text', ''),
+                    confidence=fact_data.get('confidence', 1.0)
+                )
+                facts.append(fact)
 
-            fact_logger.logger.debug(
-                f"📝 Extracted fact {fact.id}",
-                extra={
-                    "fact_id": fact.id,
-                    "statement": fact.statement[:100]
-                }
-            )
+                fact_logger.logger.debug(
+                    f"📝 Extracted fact {fact.id}",
+                    extra={
+                        "fact_id": fact.id,
+                        "statement": fact.statement[:100]
+                    }
+                )
+            except KeyError as e:
+                fact_logger.logger.error(f"❌ Missing required field in fact_data: {e}")
+                continue
 
         # Get all source URLs
         all_sources = response.get('all_sources', [])

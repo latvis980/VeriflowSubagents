@@ -64,13 +64,13 @@ class TavilySearcher:
     - Result aggregation across queries
     """
 
-    def __init__(self, config, max_results: int = 10):
+    def __init__(self, config, max_results: int = 5):
         """
         Initialize Tavily searcher
 
         Args:
             config: Configuration object with tavily_api_key
-            max_results: Maximum results per search (default: 10)
+            max_results: Maximum results per search (default: 5)
         """
         self.config = config
         self.max_results = max_results

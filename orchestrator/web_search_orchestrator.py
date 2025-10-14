@@ -46,7 +46,7 @@ class WebSearchOrchestrator:
         # Initialize all agents
         self.analyzer = FactAnalyzer(config)
         self.query_generator = QueryGenerator(config)
-        self.searcher = TavilySearcher(config, max_results=10)
+        self.searcher = TavilySearcher(config, max_results=5)
         self.credibility_filter = CredibilityFilter(config, min_credibility_score=0.70)
         self.scraper = FactCheckScraper(config)
         self.checker = FactChecker(config)

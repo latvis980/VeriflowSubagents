@@ -156,6 +156,7 @@ function streamJobProgress(jobId) {
                     reject(new Error('Connection lost and job not found. The server may have restarted.'));
                 });
         };
+    });
 }
 
 /**

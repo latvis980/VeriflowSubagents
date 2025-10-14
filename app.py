@@ -1,15 +1,17 @@
-# app.py
-from flask import Flask, render_template, request, jsonify
+# app.py - WITH STREAMING SUPPORT
+from flask import Flask, render_template, request, jsonify, Response
 import asyncio
 import os
 import re
+import threading
 from dotenv import load_dotenv
 
 # Import your components
 from orchestrator.llm_output_orchestrator import FactCheckOrchestrator
-from orchestrator.web_search_orchestrator import WebSearchOrchestrator  # ✅ NEW
+from orchestrator.web_search_orchestrator import WebSearchOrchestrator
 from utils.logger import fact_logger
 from utils.langsmith_config import langsmith_config
+from utils.job_manager import job_manager
 
 # Load environment variables
 load_dotenv()
@@ -22,14 +24,14 @@ class Config:
     def __init__(self):
         self.openai_api_key = os.getenv('OPENAI_API_KEY')
         self.browserless_endpoint = os.getenv('BROWSER_PLAYWRIGHT_ENDPOINT_PRIVATE')
-        self.tavily_api_key = os.getenv('TAVILY_API_KEY')  # ✅ NEW
+        self.tavily_api_key = os.getenv('TAVILY_API_KEY')
         self.langchain_project = os.getenv('LANGCHAIN_PROJECT', 'fact-checker')
 
         # Validate required env vars
         if not self.openai_api_key:
             raise ValueError("OPENAI_API_KEY not set in environment")
 
-        if not self.tavily_api_key:  # ✅ NEW
+        if not self.tavily_api_key:
             fact_logger.logger.warning("⚠️ TAVILY_API_KEY not set - web search pipeline will not work")
 
         fact_logger.logger.info("✅ Configuration loaded successfully")
@@ -38,9 +40,9 @@ config = Config()
 
 # Initialize orchestrators (singleton)
 llm_orchestrator = FactCheckOrchestrator(config)
-web_search_orchestrator = WebSearchOrchestrator(config) if config.tavily_api_key else None  # ✅ NEW
+web_search_orchestrator = WebSearchOrchestrator(config) if config.tavily_api_key else None
 
-# ✅ NEW: Helper function for input detection
+# Helper function for input detection
 def detect_input_format(content: str) -> str:
     """
     Detect if input is HTML (LLM output with links) or plain text
@@ -75,8 +77,7 @@ def index():
 @app.route('/api/check', methods=['POST'])
 def check_facts():
     """
-    Main API endpoint for fact checking
-    Automatically detects input format and routes to appropriate pipeline
+    ✅ NEW: Start async job and return job_id immediately
     """
     try:
         # Get content from request
@@ -92,7 +93,7 @@ def check_facts():
             extra={"content_length": len(content)}
         )
 
-        # ✅ DETECT INPUT FORMAT
+        # ✅ Detect input format
         input_format = detect_input_format(content)
 
         # Check if web search orchestrator is available
@@ -102,39 +103,24 @@ def check_facts():
                 "message": "TAVILY_API_KEY not configured. Please add it to use plain text verification."
             }), 503
 
-        # Run async orchestrator in new event loop
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        # ✅ Create job
+        job_id = job_manager.create_job(content)
 
-        try:
-            # ✅ ROUTE TO APPROPRIATE PIPELINE
-            if input_format == 'html':
-                fact_logger.logger.info("🔗 Using LLM Output pipeline (with links)")
-                result = loop.run_until_complete(
-                    llm_orchestrator.process(content)
-                )
-            else:
-                fact_logger.logger.info("🔍 Using Web Search pipeline (no links)")
-                result = loop.run_until_complete(
-                    web_search_orchestrator.process(content)
-                )
-        finally:
-            loop.close()
+        fact_logger.logger.info(f"✅ Created job: {job_id}")
 
-        # ✅ ADD FORMAT TO RESULT
-        result['input_format'] = input_format
+        # ✅ Start background processing
+        threading.Thread(
+            target=run_async_task,
+            args=(job_id, content, input_format),
+            daemon=True
+        ).start()
 
-        fact_logger.logger.info(
-            f"📤 Fact-check complete",
-            extra={
-                "session_id": result.get('session_id'),
-                "total_facts": result['summary']['total_facts'],
-                "pipeline": result.get('methodology'),
-                "input_format": input_format
-            }
-        )
-
-        return jsonify(result)
+        # ✅ Return job_id immediately
+        return jsonify({
+            "job_id": job_id,
+            "status": "processing",
+            "message": "Fact-checking started"
+        })
 
     except Exception as e:
         fact_logger.log_component_error("Flask API", e)
@@ -143,6 +129,112 @@ def check_facts():
             "message": "An error occurred during fact checking"
         }), 500
 
+def run_async_task(job_id: str, content: str, input_format: str):
+    """
+    ✅ NEW: Run the fact-checking task asynchronously
+    """
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        try:
+            # Route to appropriate pipeline with progress tracking
+            if input_format == 'html':
+                fact_logger.logger.info(f"🔗 Job {job_id}: Using LLM Output pipeline")
+                result = loop.run_until_complete(
+                    llm_orchestrator.process_with_progress(content, job_id)
+                )
+            else:
+                fact_logger.logger.info(f"🔍 Job {job_id}: Using Web Search pipeline")
+                result = loop.run_until_complete(
+                    web_search_orchestrator.process_with_progress(content, job_id)
+                )
+
+            # Mark as complete
+            result['input_format'] = input_format
+            job_manager.complete_job(job_id, result)
+
+            fact_logger.logger.info(
+                f"✅ Job {job_id} complete",
+                extra={"job_id": job_id, "total_facts": result['summary']['total_facts']}
+            )
+
+        finally:
+            loop.close()
+
+    except Exception as e:
+        fact_logger.logger.error(f"❌ Job {job_id} failed: {e}")
+        job_manager.fail_job(job_id, str(e))
+
+@app.route('/api/job/<job_id>', methods=['GET'])
+def get_job_status(job_id: str):
+    """
+    ✅ NEW: Get current job status and result
+    """
+    job = job_manager.get_job(job_id)
+
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+
+    return jsonify({
+        "job_id": job_id,
+        "status": job['status'],
+        "result": job.get('result'),
+        "error": job.get('error'),
+        "progress_log": job.get('progress_log', [])
+    })
+
+@app.route('/api/job/<job_id>/stream')
+def stream_job_progress(job_id: str):
+    """
+    ✅ NEW: Server-Sent Events stream for real-time progress
+    """
+    def generate():
+        import time
+        import json
+
+        # Get the job
+        job = job_manager.get_job(job_id)
+        if not job:
+            yield f"data: {json.dumps({'error': 'Job not found'})}\n\n"
+            return
+
+        # Get progress queue
+        progress_queue = job_manager.get_progress_queue(job_id)
+        if not progress_queue:
+            yield f"data: {json.dumps({'error': 'Progress queue not found'})}\n\n"
+            return
+
+        # Send initial status
+        yield f"data: {json.dumps({'message': 'Starting fact-check...', 'status': 'processing'})}\n\n"
+
+        # Stream progress updates
+        timeout = 600  # 10 minutes
+        start_time = time.time()
+
+        while True:
+            # Check timeout
+            if time.time() - start_time > timeout:
+                yield f"data: {json.dumps({'error': 'Timeout', 'done': True})}\n\n"
+                break
+
+            # Check if job is done
+            current_job = job_manager.get_job(job_id)
+            if current_job['status'] in ['completed', 'failed']:
+                yield f"data: {json.dumps({'done': True, 'status': current_job['status']})}\n\n"
+                break
+
+            # Get next progress update (non-blocking with timeout)
+            try:
+                import queue
+                progress_item = progress_queue.get(timeout=1)
+                yield f"data: {json.dumps(progress_item)}\n\n"
+            except queue.Empty:
+                # Send heartbeat to keep connection alive
+                yield f"data: {json.dumps({'heartbeat': True})}\n\n"
+
+    return Response(generate(), mimetype='text/event-stream')
+
 @app.route('/api/health', methods=['GET'])
 def health_check():
     """Health check endpoint for Railway"""
@@ -150,7 +242,7 @@ def health_check():
         "status": "healthy",
         "langsmith_enabled": os.getenv('LANGCHAIN_TRACING_V2') == 'true',
         "browserless_configured": bool(os.getenv('BROWSER_PLAYWRIGHT_ENDPOINT_PRIVATE')),
-        "tavily_configured": bool(os.getenv('TAVILY_API_KEY')),  # ✅ NEW
+        "tavily_configured": bool(os.getenv('TAVILY_API_KEY')),
         "pipelines": {
             "llm_output": True,
             "web_search": bool(web_search_orchestrator)
@@ -174,7 +266,6 @@ if __name__ == '__main__':
     fact_logger.logger.info(f"🔍 Debug mode: {debug}")
     fact_logger.logger.info(f"📊 LangSmith project: {config.langchain_project}")
 
-    # ✅ NEW: Log which pipelines are available
     if web_search_orchestrator:
         fact_logger.logger.info("✅ Both pipelines available: LLM Output & Web Search")
     else:

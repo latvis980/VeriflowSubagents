@@ -10,6 +10,7 @@ CREDIBILITY SCORING CRITERIA (0.0 - 1.0):
 
 **TIER 1 - HIGHLY CREDIBLE (0.85-1.0):**
 - Primary sources (government agencies, official organizations, companies making announcements)
+- Official websites of the organizations and establishements mentioned in the fact
 - Peer-reviewed academic journals
 - Major news organizations with strong editorial standards (NYT, WSJ, BBC, Reuters, AP)
 - Official government websites (.gov domains)

@@ -1,50 +1,58 @@
 # agents/fact_checker.py
-from langchain.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
-from langchain_core.output_parsers import JsonOutputParser
+"""
+Fact Checker Agent - UPDATED WITH TIER FILTERING
+Compares claimed facts against source excerpts
+
+✅ TIER FILTERING: Only uses Tier 1 (0.85-1.0) and Tier 2 (0.70-0.84) sources
+✅ TIER PRECEDENCE: Tier 1 sources override Tier 2 when there are contradictions
+"""
+
 from langsmith import traceable
+from langchain_openai import ChatOpenAI
+from langchain.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import JsonOutputParser
 from pydantic import BaseModel, Field
-from typing import List, Dict, Any, Optional
+from typing import Optional, Dict, List
 import time
 
-from prompts.checker_prompts import get_checker_prompts
 from utils.logger import fact_logger
 from utils.langsmith_config import langsmith_config
 from utils.source_metadata import SourceMetadata
 
+
 class FactCheckResult(BaseModel):
+    """Result of fact checking"""
     fact_id: str
     statement: str
-    match_score: float
+    match_score: float = Field(ge=0.0, le=1.0)
     assessment: str
     discrepancies: str
-    confidence: float
+    confidence: float = Field(ge=0.0, le=1.0)
     reasoning: str
-    sources_consulted: List[Dict[str, Any]] = []
+    tier_breakdown: Optional[Dict[str, int]] = None  # ✅ NEW: Track tier usage
 
-class CheckerOutput(BaseModel):
-    match_score: float = Field(description="Accuracy score from 0.0 to 1.0")
-    assessment: str = Field(description="Detailed assessment of the fact")
-    discrepancies: str = Field(description="Any discrepancies found")
-    confidence: float = Field(description="Confidence in this evaluation")
-    reasoning: str = Field(description="Step-by-step reasoning")
 
 class FactChecker:
-    """Compare facts against source excerpts with LangSmith tracing"""
+    """
+    Checks facts against extracted excerpts
+
+    ✅ TIER FILTERING:
+    - Discards Tier 3+ sources (< 0.70 credibility)
+    - Only evaluates against Tier 1 (0.85-1.0) and Tier 2 (0.70-0.84)
+    - Sorts excerpts by tier (Tier 1 first) before evaluation
+    """
 
     def __init__(self, config):
         self.config = config
-
-        # ✅ PROPER JSON MODE - OpenAI guarantees valid JSON
         self.llm = ChatOpenAI(
             model="gpt-4o",
             temperature=0
         ).bind(response_format={"type": "json_object"})
 
-        # ✅ SIMPLE PARSER - No fixing needed
-        self.parser = JsonOutputParser(pydantic_object=CheckerOutput)
+        self.parser = JsonOutputParser(pydantic_object=FactCheckResult)
 
         # Load prompts
+        from prompts.checker_prompts import get_checker_prompts
         self.prompts = get_checker_prompts()
 
         fact_logger.log_component_start("FactChecker", model="gpt-4o")
@@ -52,20 +60,24 @@ class FactChecker:
     @traceable(
         name="check_fact_accuracy",
         run_type="chain",
-        tags=["fact-checking", "verification"]
+        tags=["fact-checking", "verification", "tier-filtering"]
     )
     async def check_fact(
         self, 
         fact, 
         excerpts: dict,
-        source_metadata: Optional[Dict[str, SourceMetadata]] = None # ✅ NEW parameter
+        source_metadata: Optional[Dict[str, SourceMetadata]] = None
     ) -> FactCheckResult:
         """
-        Compare fact against extracted excerpts with full tracing
+        Compare fact against extracted excerpts with tier filtering
+
+        ✅ TIER FILTERING: Only uses Tier 1 (0.85-1.0) and Tier 2 (0.70-0.84) sources
+        Tier 3 and below are discarded
 
         Args:
             fact: Fact object with id, statement, sources
             excerpts: dict of {url: [excerpt_objects]}
+            source_metadata: Optional dict of {url: SourceMetadata} with credibility tiers
         """
         start_time = time.time()
 
@@ -79,6 +91,59 @@ class FactChecker:
                     "relevance": excerpt.get('relevance', 0.5)
                 })
 
+        # ✅ FILTER BY TIER: Only keep Tier 1 & Tier 2 sources
+        tier_breakdown = {"tier1": 0, "tier2": 0, "tier3_plus_discarded": 0}
+
+        if source_metadata:
+            filtered_excerpts = []
+
+            for excerpt in all_excerpts:
+                url = excerpt['url']
+                metadata = source_metadata.get(url)
+
+                if metadata:
+                    score = metadata.credibility_score
+
+                    # Tier 1: 0.85-1.0, Tier 2: 0.70-0.84
+                    if score >= 0.85:
+                        excerpt['tier'] = 1
+                        excerpt['credibility_score'] = score
+                        filtered_excerpts.append(excerpt)
+                        tier_breakdown["tier1"] += 1
+                    elif score >= 0.70:
+                        excerpt['tier'] = 2
+                        excerpt['credibility_score'] = score
+                        filtered_excerpts.append(excerpt)
+                        tier_breakdown["tier2"] += 1
+                    else:
+                        # Discard Tier 3 and below
+                        tier_breakdown["tier3_plus_discarded"] += 1
+                        fact_logger.logger.debug(
+                            f"🗑️ Discarding Tier 3+ excerpt from {metadata.name} (score: {score:.2f})"
+                        )
+                else:
+                    # No metadata - keep by default, treat as Tier 2
+                    excerpt['tier'] = 2
+                    excerpt['credibility_score'] = 0.70
+                    filtered_excerpts.append(excerpt)
+                    tier_breakdown["tier2"] += 1
+
+            fact_logger.logger.info(
+                f"📊 Tier filtering for {fact.id}: Tier 1={tier_breakdown['tier1']}, "
+                f"Tier 2={tier_breakdown['tier2']}, Discarded={tier_breakdown['tier3_plus_discarded']}",
+                extra={
+                    "fact_id": fact.id,
+                    "tier1": tier_breakdown["tier1"],
+                    "tier2": tier_breakdown["tier2"],
+                    "discarded": tier_breakdown["tier3_plus_discarded"]
+                }
+            )
+
+            all_excerpts = filtered_excerpts
+
+        # ✅ SORT BY TIER: Tier 1 sources first, then Tier 2
+        all_excerpts.sort(key=lambda x: x.get('tier', 2))
+
         fact_logger.logger.info(
             f"⚖️ Checking fact {fact.id}",
             extra={
@@ -91,39 +156,33 @@ class FactChecker:
 
         if not all_excerpts:
             fact_logger.logger.warning(
-                f"⚠️ No excerpts found for fact {fact.id}",
+                f"⚠️ No Tier 1 or Tier 2 excerpts found for fact {fact.id}",
                 extra={"fact_id": fact.id}
             )
             return FactCheckResult(
                 fact_id=fact.id,
                 statement=fact.statement,
                 match_score=0.0,
-                assessment="No supporting excerpts found in sources",
-                discrepancies="Cannot verify - no relevant content found",
+                assessment="No Tier 1 or Tier 2 sources available for verification",
+                discrepancies="All available sources were below credibility threshold (Tier 3+)",
                 confidence=0.0,
-                reasoning="No excerpts available for comparison"
+                reasoning="Fact could not be verified - only low-credibility sources available",
+                tier_breakdown=tier_breakdown
             )
 
         try:
             result = await self._evaluate_fact(fact, all_excerpts, source_metadata)
+            result.tier_breakdown = tier_breakdown
 
             duration = time.time() - start_time
+
             fact_logger.log_component_complete(
                 "FactChecker",
                 duration,
                 fact_id=fact.id,
                 match_score=result.match_score,
-                confidence=result.confidence
-            )
-
-            fact_logger.logger.info(
-                f"📊 Fact check complete for {fact.id}: {result.match_score:.2f}",
-                extra={
-                    "fact_id": fact.id,
-                    "match_score": result.match_score,
-                    "confidence": result.confidence,
-                    "assessment_summary": result.assessment[:100]
-                }
+                tier1_sources=tier_breakdown["tier1"],
+                tier2_sources=tier_breakdown["tier2"]
             )
 
             return result
@@ -132,80 +191,118 @@ class FactChecker:
             fact_logger.log_component_error("FactChecker", e, fact_id=fact.id)
             raise
 
-    def _format_excerpts_with_sources(
-        self, 
-        excerpts: list, 
-        source_metadata: Optional[Dict[str, SourceMetadata]]
-    ) -> str:
+    def _format_excerpts(self, excerpts: list, source_metadata: Optional[Dict[str, SourceMetadata]] = None) -> str:
         """
-        Format excerpts with source attribution for the prompt
-
-        Args:
-            excerpts: list of excerpt dicts with 'url', 'quote', 'relevance'
-            source_metadata: dict mapping URL to SourceMetadata
-
-        Returns:
-            Formatted string with source names included
+        Format excerpts for the prompt
+        ✅ ENHANCED: Shows tier information and sorts by tier
         """
-        if not excerpts:
-            return "NO EXCERPTS FOUND - No relevant content located in source documents."
-
         formatted = []
-        for ex in excerpts:
-            url = ex['url']
-            metadata = source_metadata.get(url) if source_metadata else None
 
-            if metadata:
-                source_name = metadata.name
-                source_type = metadata.source_type
-                credibility_tier = metadata.credibility_tier
+        # Group by tier for clear separation
+        tier1_excerpts = [e for e in excerpts if e.get('tier') == 1]
+        tier2_excerpts = [e for e in excerpts if e.get('tier') == 2]
 
-                formatted.append(
-                    f"[Source: {source_name} ({source_type})]\n"
-                    f"Credibility: {credibility_tier}\n"
-                    f"Relevance: {ex['relevance']}\n"
-                    f"Quote: {ex['quote']}\n"
-                    f"URL: {url}\n"
-                )
-            else:
-                # Fallback if no metadata
-                formatted.append(
-                    f"[Source: {url}]\n"
-                    f"Relevance: {ex['relevance']}\n"
-                    f"Quote: {ex['quote']}\n"
-                )
+        # Format Tier 1 sources first
+        if tier1_excerpts:
+            formatted.append("=" * 60)
+            formatted.append("TIER 1 SOURCES (HIGHEST CREDIBILITY - PRIMARY AUTHORITY)")
+            formatted.append("=" * 60)
 
-        return "\n\n".join(formatted)
+            for ex in tier1_excerpts:
+                url = ex['url']
+                metadata = source_metadata.get(url) if source_metadata else None
+
+                if metadata:
+                    formatted.append(
+                        f"\n[Source: {metadata.name} ({metadata.source_type})]\n"
+                        f"Credibility: {metadata.credibility_tier} (Score: {metadata.credibility_score:.2f})\n"
+                        f"Relevance: {ex['relevance']}\n"
+                        f"Quote: {ex['quote']}\n"
+                        f"URL: {url}\n"
+                    )
+                else:
+                    formatted.append(
+                        f"\n[Source: {url}]\n"
+                        f"Tier: 1\n"
+                        f"Relevance: {ex['relevance']}\n"
+                        f"Quote: {ex['quote']}\n"
+                    )
+
+        # Format Tier 2 sources next
+        if tier2_excerpts:
+            formatted.append("\n" + "=" * 60)
+            formatted.append("TIER 2 SOURCES (CREDIBLE - SECONDARY AUTHORITY)")
+            formatted.append("=" * 60)
+
+            for ex in tier2_excerpts:
+                url = ex['url']
+                metadata = source_metadata.get(url) if source_metadata else None
+
+                if metadata:
+                    formatted.append(
+                        f"\n[Source: {metadata.name} ({metadata.source_type})]\n"
+                        f"Credibility: {metadata.credibility_tier} (Score: {metadata.credibility_score:.2f})\n"
+                        f"Relevance: {ex['relevance']}\n"
+                        f"Quote: {ex['quote']}\n"
+                        f"URL: {url}\n"
+                    )
+                else:
+                    formatted.append(
+                        f"\n[Source: {url}]\n"
+                        f"Tier: 2\n"
+                        f"Relevance: {ex['relevance']}\n"
+                        f"Quote: {ex['quote']}\n"
+                    )
+
+        return "\n".join(formatted)
 
     @traceable(name="evaluate_fact_match", run_type="llm")
     async def _evaluate_fact(self, fact, excerpts: list, source_metadata: Optional[Dict[str, SourceMetadata]] = None) -> FactCheckResult:
         """
         Evaluate fact accuracy against excerpts
+        ✅ Emphasizes tier precedence in prompt
 
         Args:
             fact: Fact object
-            excerpts: list of excerpt dicts with url, quote, relevance
+            excerpts: list of excerpt dicts with url, quote, relevance, tier
+            source_metadata: Source metadata for tier information
         """
-        # Format excerpts into readable text for the prompt
-        excerpts_text = self._format_excerpts(excerpts)
+        # Format excerpts with tier separation
+        excerpts_text = self._format_excerpts(excerpts, source_metadata)
 
-        # ✅ EXPLICIT JSON MENTION
-        system_prompt = self.prompts["system"] + "\n\nIMPORTANT: You MUST return valid JSON only. No other text."
+        # ✅ Enhanced system prompt with tier precedence
+        tier_precedence_note = """
+
+⚠️ CRITICAL: TIER 1 SOURCES TAKE ABSOLUTE PRECEDENCE
+
+When evaluating facts:
+1. Prioritize Tier 1 sources (0.85-1.0 credibility) as the PRIMARY TRUTH
+2. Use Tier 2 sources (0.70-0.84 credibility) only for supporting context
+3. If Tier 1 and Tier 2 contradict, ALWAYS trust Tier 1
+4. If only Tier 2 sources available, note this limitation in reasoning
+
+Example: "While Tier 2 sources (Travel Blog) mention Chef Mario, Tier 1 sources (Official Restaurant Website, Michelin Guide) confirm Chef Julia is the current head chef. Tier 1 takes precedence."
+"""
+
+        system_prompt = self.prompts["system"] + tier_precedence_note + "\n\nIMPORTANT: You MUST return valid JSON only. No other text."
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
             ("user", self.prompts["user"] + "\n\n{format_instructions}\n\nReturn your response as valid JSON.")
         ])
 
-        # ✅ FORMAT INSTRUCTIONS
         prompt_with_format = prompt.partial(
             format_instructions=self.parser.get_format_instructions()
         )
 
         callbacks = langsmith_config.get_callbacks(f"fact_checker_{fact.id}")
 
-        # ✅ CLEAN CHAIN - No manual JSON parsing needed
         chain = prompt_with_format | self.llm | self.parser
+
+        fact_logger.logger.debug(
+            f"🔗 Invoking LLM for fact checking",
+            extra={"fact_id": fact.id, "num_excerpts": len(excerpts)}
+        )
 
         response = await chain.ainvoke(
             {
@@ -215,64 +312,13 @@ class FactChecker:
             config={"callbacks": callbacks.handlers}
         )
 
-        # ✅ NEW: Build sources_consulted from excerpts and metadata
-        sources_consulted = []
-        if source_metadata:
-            for ex in excerpts:
-                url = ex['url']
-                metadata = source_metadata.get(url)
-                if metadata:
-                    # Determine if this source supports the claim based on relevance
-                    supports = ex.get('relevance', 0.5) >= 0.7
-
-                    sources_consulted.append({
-                        "url": url,
-                        "name": metadata.name,
-                        "source_type": metadata.source_type,
-                        "credibility_score": metadata.credibility_score,
-                        "supports_claim": supports,
-                        "key_excerpt": ex['quote'][:200] + "..." if len(ex['quote']) > 200 else ex['quote']
-                    })
-
-        # Remove duplicates (same URL might have multiple excerpts)
-        seen_urls = set()
-        unique_sources = []
-        for source in sources_consulted:
-            if source['url'] not in seen_urls:
-                unique_sources.append(source)
-                seen_urls.add(source['url'])
-
-        # ✅ DIRECT DICT ACCESS - Parser returns clean dict
+        # Parse and return
         return FactCheckResult(
             fact_id=fact.id,
             statement=fact.statement,
             match_score=response['match_score'],
             assessment=response['assessment'],
-            discrepancies=response['discrepancies'],
+            discrepancies=response.get('discrepancies', 'None'),
             confidence=response['confidence'],
-            reasoning=response['reasoning'],
-            sources_consulted=unique_sources  # ✅ NEW
+            reasoning=response['reasoning']
         )
-
-    def _format_excerpts(self, excerpts: list) -> str:
-        """
-        Format excerpts list into readable text for the prompt
-
-        Args:
-            excerpts: list of dicts with 'url', 'quote', 'relevance'
-
-        Returns:
-            Formatted string for the prompt
-        """
-        if not excerpts:
-            return "NO EXCERPTS FOUND - No relevant content located in source documents."
-
-        formatted = []
-        for ex in excerpts:
-            formatted.append(
-                f"[Source: {ex['url']}]\n"
-                f"Relevance: {ex['relevance']}\n"
-                f"Quote: {ex['quote']}\n"
-            )
-
-        return "\n\n".join(formatted)

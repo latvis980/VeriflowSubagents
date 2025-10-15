@@ -11,47 +11,41 @@ Given a factual claim, generate multiple search queries that will help verify th
 
 QUERY GENERATION PRINCIPLES:
 
-1. **Primary Query (Most Direct):**
+1. **Primary Query (Most Literal):**
    - Include the key entities, dates, numbers, and claims
    - Use natural language that matches how sources write about the topic
-   - Keep it concise but specific (5-10 words ideal)
+   - Keep it concise but specific (5-7 words)
 
-2. **Alternative Queries (Different Angles):**
-   - Rephrase using synonyms
-   - Focus on different aspects of the claim
-   - Add context words like "official", "announced", "confirmed"
-   - Include source types: "report", "study", "statement"
+2. **Broader Query:**
+   - Create query with the key entity, name of the person or company
+   - Add only one or two keywords from the fact statement to narrow down the search
 
-3. **Query Optimization:**
-   - Include specific dates if mentioned in the fact
-   - Include specific numbers/quantities if mentioned
-   - Include proper names exactly as stated
-   - Use quotation marks for exact phrases only when necessary
-   - Avoid unnecessary words like "verify", "check", "is it true"
+3. **Alternative Query:**
+   - Rework the fact into a statement without the dates, numbers and minimal specific claims
+   - Add keywords that will help return results from official sources, official websites, independent reports, or reputable media outlets
+   
 
 EXAMPLES:
 
 Fact: "The Silo Hotel in Cape Town opened in March 2017"
-Primary Query: Silo Hotel Cape Town opened March 2017
-Alternative 1: Silo Hotel Cape Town opening date
-Alternative 2: Cape Town Silo Hotel 2017 launch
+Primary Query: Silo Hotel Cape Town opening March 2017
+Broader Query: Silo Hotel opening date
+Alternative Query: Cape Town Silo Hotel opened in official site
 
 Fact: "Tesla sold 1.8 million vehicles in 2023"
 Primary Query: Tesla vehicle sales 2023 1.8 million
-Alternative 1: Tesla deliveries 2023 annual report
-Alternative 2: Tesla 2023 sales figures official
+Broader Query: Tesla sales 2023
+Alternative Query: Tesla 2023 sales figures official sec.gov
 
-Fact: "The James Webb Space Telescope launched on December 25, 2021"
-Primary Query: James Webb Space Telescope launch December 25 2021
-Alternative 1: JWST launch date 2021
-Alternative 2: James Webb telescope launch Ariane 5
+Fact: "Trésind Studio restaurant in Dubai is awarded two stars by Michelin Guide"
+Primary Query: Trésind Studio Dubai two Michelin stars
+Broader Query: Trésind Studio Michelin
+Alternative Query: Trésind Studio stars Michelin guide 
 
 IMPORTANT RULES:
-- Generate 1 primary query and 2-3 alternative queries
+- Generate 1 primary query and 2 alternative queries
 - Keep queries focused and specific
 - Prioritize finding authoritative sources
-- Include key identifiers (names, dates, numbers)
-- Avoid questions - use declarative search terms
 
 IMPORTANT: You MUST return valid JSON only. No other text or explanations.
 
@@ -76,10 +70,9 @@ CONTEXT (if available):
 {context}
 
 INSTRUCTIONS:
-- Create 1 primary query (most direct approach)
-- Create 2-3 alternative queries (different angles)
+- Create 1 primary query including all key identifiers names, dates, etc. (most direct approach)
+- Create 2 alternative queries (less restrictive)
 - Focus on finding authoritative, credible sources
-- Include all key entities, dates, and numbers from the fact
 - Keep queries natural and searchable
 
 {format_instructions}

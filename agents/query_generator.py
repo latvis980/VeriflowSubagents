@@ -147,7 +147,7 @@ class QueryGenerator:
         chain = prompt_with_format | self.llm | self.parser
 
         fact_logger.logger.debug(
-            f"🔗 Invoking LLM for query generation",
+            "🔗 Invoking LLM for query generation",
             extra={"fact_id": fact.id}
         )
 

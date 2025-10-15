@@ -295,17 +295,19 @@ class WebSearchOrchestrator:
 
             # ===== STEP 7: Save Session Data =====
             fact_logger.logger.info("💾 Step 7: Saving session data")
-            
+
             # Combine all scraped content for saving
             all_scraped_content = {}
             for fact_scraped in scraped_content_by_fact.values():
                 all_scraped_content.update(fact_scraped)
-            
+
+            # ✅ NEW: Include queries in the report
             self.file_manager.save_session_content(
                 session_id,
                 all_scraped_content,
                 facts,
-                upload_to_drive=True  # ✅ Enable Google Drive upload
+                upload_to_drive=True,
+                queries_by_fact=all_queries_by_fact  # ✅ Pass the generated queries
             )
 
             # ===== Generate Summary =====
@@ -505,11 +507,13 @@ class WebSearchOrchestrator:
             for fact_scraped in scraped_content_by_fact.values():
                 all_scraped_content.update(fact_scraped)
 
+            # ✅ NEW: Include queries in the report
             self.file_manager.save_session_content(
                 session_id,
                 all_scraped_content,
                 facts,
-                upload_to_drive=True
+                upload_to_drive=True,
+                queries_by_fact=all_queries_by_fact  # ✅ Pass the generated queries
             )
 
             summary = self._generate_summary(results)

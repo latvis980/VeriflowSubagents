@@ -131,36 +131,40 @@ def check_facts():
 
 def run_async_task(job_id: str, content: str, input_format: str):
     """
-    ✅ NEW: Run the fact-checking task asynchronously
+    ✅ PRODUCTION FIX: Handle asyncio in Gunicorn gevent workers
     """
+    import nest_asyncio
+
     try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        # Allow nested event loops (required for gevent)
+        nest_asyncio.apply()
 
+        # Get or create event loop
         try:
-            # Route to appropriate pipeline with progress tracking
-            if input_format == 'html':
-                fact_logger.logger.info(f"🔗 Job {job_id}: Using LLM Output pipeline")
-                result = loop.run_until_complete(
-                    llm_orchestrator.process_with_progress(content, job_id)
-                )
-            else:
-                fact_logger.logger.info(f"🔍 Job {job_id}: Using Web Search pipeline")
-                result = loop.run_until_complete(
-                    web_search_orchestrator.process_with_progress(content, job_id)
-                )
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
 
-            # Mark as complete
-            result['input_format'] = input_format
-            job_manager.complete_job(job_id, result)
-
-            fact_logger.logger.info(
-                f"✅ Job {job_id} complete",
-                extra={"job_id": job_id, "total_facts": result['summary']['total_facts']}
+        # Route to pipeline
+        if input_format == 'html':
+            fact_logger.logger.info(f"🔗 Job {job_id}: Using LLM Output pipeline")
+            result = loop.run_until_complete(
+                llm_orchestrator.process_with_progress(content, job_id)
+            )
+        else:
+            fact_logger.logger.info(f"🔍 Job {job_id}: Using Web Search pipeline")
+            result = loop.run_until_complete(
+                web_search_orchestrator.process_with_progress(content, job_id)
             )
 
-        finally:
-            loop.close()
+        result['input_format'] = input_format
+        job_manager.complete_job(job_id, result)
+
+        fact_logger.logger.info(
+            f"✅ Job {job_id} complete",
+            extra={"job_id": job_id, "total_facts": result['summary']['total_facts']}
+        )
 
     except Exception as e:
         fact_logger.logger.error(f"❌ Job {job_id} failed: {e}")

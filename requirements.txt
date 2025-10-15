@@ -21,6 +21,7 @@ flask==3.0.0
 
 # Async support for Gunicorn
 gevent==24.2.1
+nest_asyncio==1.6.0
 
 # Utilities
 python-dotenv==1.0.0

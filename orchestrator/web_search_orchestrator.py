@@ -16,11 +16,12 @@ Pipeline:
 from langsmith import traceable
 import time
 import asyncio
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from utils.logger import fact_logger
 from utils.langsmith_config import langsmith_config
 from utils.file_manager import FileManager
+from utils.job_manager import job_manager
 
 # Import existing agents
 from agents.analyser import FactAnalyzer
@@ -66,7 +67,7 @@ class WebSearchOrchestrator:
         run_type="chain",
         tags=["orchestrator", "web-search", "fact-verification"]
     )
-    async def process(self, text_content: str) -> dict:
+    async def process(self, text_content: str, job_id: Optional[str] = None) -> dict:
         """
         Main pipeline for web search-based fact verification
 
@@ -207,27 +208,45 @@ class WebSearchOrchestrator:
 
             # ===== STEP 5: Scrape Credible Sources =====
             fact_logger.logger.info("🌐 Step 5: Scraping credible sources")
-            
+
             scraped_content_by_fact = {}
-            
+
             for fact in facts:
                 urls_to_scrape = credible_urls_by_fact.get(fact.id, [])
-                
+
                 if not urls_to_scrape:
                     fact_logger.logger.warning(
                         f"⚠️ No credible URLs to scrape for {fact.id}"
                     )
                     scraped_content_by_fact[fact.id] = {}
                     continue
-                
+
                 fact_logger.logger.info(
                     f"Scraping {len(urls_to_scrape)} URLs for {fact.id}"
                 )
-                
-                # Scrape all URLs for this fact
-                scraped_content = await self.scraper.scrape_urls_for_facts(urls_to_scrape)
+
+                # ✅ NEW: Use batch scraping with progress tracking
+                def progress_callback(completed, total, results_so_far):
+                    """Update job progress during scraping"""
+                    if job_id:
+                        progress = {
+                            "stage": "scraping",
+                            "fact_id": fact.id,
+                            "completed_urls": completed,
+                            "total_urls": total,
+                            "successful_scrapes": len([v for v in results_so_far.values() if v])
+                        }
+                        job_manager.update_progress(job_id, progress)
+
+                # Scrape with batching (5 URLs per batch = ~3-4 min per batch)
+                scraped_content = await self.scraper.scrape_urls_in_batches(
+                    urls_to_scrape,
+                    batch_size=5,  # Adjust based on your needs
+                    progress_callback=progress_callback if job_id else None
+                )
+
                 scraped_content_by_fact[fact.id] = scraped_content
-                
+
                 successful_scrapes = len([c for c in scraped_content.values() if c])
                 fact_logger.logger.info(
                     f"✅ Scraped {successful_scrapes}/{len(urls_to_scrape)} sources for {fact.id}",

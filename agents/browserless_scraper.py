@@ -402,6 +402,93 @@ class FactCheckScraper:
         else:
             await route.continue_()
 
+    async def scrape_urls_in_batches(
+        self, 
+        urls: List[str], 
+        batch_size: int = 5,
+        progress_callback=None
+    ) -> Dict[str, str]:
+        """
+        ✅ NEW: Scrape URLs in batches to handle large numbers of URLs
+
+        Args:
+            urls: List of all URLs to scrape
+            batch_size: Number of URLs per batch (default: 5)
+            progress_callback: Optional callback(current, total, results_so_far)
+
+        Returns:
+            Dict mapping URL to scraped content
+        """
+        if not urls:
+            fact_logger.logger.warning("No URLs provided for scraping")
+            return {}
+
+        fact_logger.logger.info(
+            f"🔄 Starting batch scraping of {len(urls)} URLs",
+            extra={
+                "total_urls": len(urls),
+                "batch_size": batch_size,
+                "estimated_batches": (len(urls) + batch_size - 1) // batch_size
+            }
+        )
+
+        all_results = {}
+        total_urls = len(urls)
+
+        # Process URLs in batches
+        for batch_num, i in enumerate(range(0, len(urls), batch_size), 1):
+            batch_urls = urls[i:i + batch_size]
+            total_batches = (len(urls) + batch_size - 1) // batch_size
+
+            fact_logger.logger.info(
+                f"📦 Processing batch {batch_num}/{total_batches} ({len(batch_urls)} URLs)",
+                extra={
+                    "batch_num": batch_num,
+                    "total_batches": total_batches,
+                    "batch_size": len(batch_urls)
+                }
+            )
+
+            # Scrape this batch using existing method
+            batch_results = await self.scrape_urls_for_facts(batch_urls)
+
+            # Merge results
+            all_results.update(batch_results)
+
+            # Calculate progress
+            completed = len(all_results)
+
+            fact_logger.logger.info(
+                f"✅ Batch {batch_num}/{total_batches} complete",
+                extra={
+                    "completed_urls": completed,
+                    "total_urls": total_urls,
+                    "progress_percent": round((completed / total_urls) * 100, 1)
+                }
+            )
+
+            # Call progress callback if provided
+            if progress_callback:
+                try:
+                    progress_callback(completed, total_urls, all_results)
+                except Exception as e:
+                    fact_logger.logger.warning(f"Progress callback error: {e}")
+
+            # Small delay between batches to avoid overwhelming the system
+            if i + batch_size < len(urls):  # Not the last batch
+                await asyncio.sleep(2.0)
+
+        fact_logger.logger.info(
+            f"🎉 Batch scraping complete: {len(all_results)}/{total_urls} URLs scraped",
+            extra={
+                "successful": len([v for v in all_results.values() if v]),
+                "failed": len([v for v in all_results.values() if not v]),
+                "total": total_urls
+            }
+        )
+
+        return all_results
+
     async def _extract_structured_content(self, page: Page) -> str:
         """Extract content while preserving structure"""
         try:

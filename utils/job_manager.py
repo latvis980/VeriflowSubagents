@@ -66,6 +66,23 @@ class JobManager:
                 except queue.Full:
                     pass  # Queue full, skip this update
 
+    def update_progress(self, job_id: str, progress_data: dict):
+        """
+        Update job with progress information
+
+        Args:
+            job_id: The job identifier
+            progress_data: Dictionary with progress information
+        """
+        if job_id in self.jobs:
+            self.jobs[job_id]['progress'] = progress_data
+            self.jobs[job_id]['last_updated'] = datetime.now().isoformat()
+
+            logger.info(
+                f"📊 Updated progress for job {job_id}",
+                extra={"job_id": job_id, "progress": progress_data}
+            )
+
     def get_progress_queue(self, job_id: str) -> Optional[queue.Queue]:
         """
         Get progress queue for streaming

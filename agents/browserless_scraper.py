@@ -45,16 +45,16 @@ class FactCheckScraper:
         self._session_lock = asyncio.Lock()
 
         # Timeouts
-        self.default_timeout = 30000  # 30 seconds
-        self.slow_timeout = 60000     # 60 seconds
-        self.browser_launch_timeout = 30000
+        self.default_timeout = 5000  # 5 seconds
+        self.slow_timeout = 10000     # 10 seconds
+        self.browser_launch_timeout = 10000
 
         # Domain-specific timeouts
         self.domain_timeouts = {
-            'nytimes.com': 45000,
-            'washingtonpost.com': 45000,
-            'wsj.com': 45000,
-            'forbes.com': 40000,
+            'nytimes.com': 10000,
+            'washingtonpost.com': 10000,
+            'wsj.com': 10000,
+            'forbes.com': 10000,
         }
 
         # Timing
@@ -198,6 +198,9 @@ class FactCheckScraper:
                     if self.browserless_token and 'token=' not in connect_url:
                         separator = '&' if '?' in connect_url else '?'
                         connect_url = f"{connect_url}{separator}token={self.browserless_token}"
+                        # Add timeout parameter (4.5 minutes = 270000 milliseconds)
+                        browserless_session_timeout = 270000
+                        connect_url = f"{connect_url}&timeout={browserless_session_timeout}"
 
                     fact_logger.logger.info(
                         f"🔗 Browser {browser_index}: Connecting to Railway Browserless",
@@ -217,7 +220,7 @@ class FactCheckScraper:
                     fact_logger.logger.warning(
                         f"⚠️ Railway Browserless connection failed for browser {browser_index}: {browserless_error}"
                     )
-                    fact_logger.logger.info(f"🔄 Falling back to local Playwright...")
+                    fact_logger.logger.info("🔄 Falling back to local Playwright...")
 
             # ✅ Fallback to local Playwright
             fact_logger.logger.info(f"🔧 Browser {browser_index}: Using local Playwright")
@@ -262,7 +265,8 @@ class FactCheckScraper:
         try:
             # Get domain-specific timeout
             domain = urlparse(url).netloc.lower()
-            timeout = self.domain_timeouts.get(domain, self.default_timeout)
+            base_timeout = self.domain_timeouts.get(domain, self.default_timeout)
+            timeout = min(base_timeout, 10000)  # Cap at 10 seconds
 
             fact_logger.logger.debug(
                 f"🎯 Browser {browser_index}: Scraping {url}",
@@ -277,7 +281,7 @@ class FactCheckScraper:
 
             # Navigate
             await page.goto(url, wait_until="domcontentloaded", timeout=timeout)
-            await asyncio.sleep(self.load_wait_time)
+            await asyncio.sleep(1.0)  # Reduced from 2.0 to 1.0 seconds
 
             # Extract content
             content = await self._extract_structured_content(page)

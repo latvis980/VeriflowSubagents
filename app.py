@@ -1,10 +1,8 @@
-# app.py - WITH STREAMING AND FULL TYPE SAFETY
+# app.py
 from flask import Flask, render_template, request, jsonify, Response
-import asyncio
 import os
 import re
 import threading
-import queue
 from typing import Optional
 from dotenv import load_dotenv
 
@@ -14,6 +12,7 @@ from orchestrator.web_search_orchestrator import WebSearchOrchestrator
 from utils.logger import fact_logger
 from utils.langsmith_config import langsmith_config
 from utils.job_manager import job_manager
+from utils.async_utils import run_async_in_thread, cleanup_thread_loop  # ✅ NEW
 
 # Load environment variables
 load_dotenv()
@@ -43,7 +42,7 @@ config = Config()
 # Initialize orchestrators (singleton)
 llm_orchestrator = FactCheckOrchestrator(config)
 
-# ✅ IMPROVED: Better error handling for web search orchestrator
+# Better error handling for web search orchestrator
 web_search_orchestrator: Optional[WebSearchOrchestrator] = None
 if config.tavily_api_key:
     try:
@@ -58,20 +57,10 @@ if config.tavily_api_key:
 def detect_input_format(content: str) -> str:
     """
     Detect if input is HTML (LLM output with links) or plain text
-
-    Args:
-        content: Input content to analyze
-
-    Returns:
-        'html' or 'text'
     """
     # Check for HTML tags
     html_pattern = r'<\s*[a-z][^>]*>'
-
-    # Check for common HTML elements
     has_html_tags = bool(re.search(html_pattern, content, re.IGNORECASE))
-
-    # Check for anchor tags specifically (links)
     has_links = bool(re.search(r'<\s*a\s+[^>]*href\s*=', content, re.IGNORECASE))
 
     if has_html_tags or has_links:
@@ -88,42 +77,34 @@ def index():
 
 @app.route('/api/check', methods=['POST'])
 def check_facts():
-    """
-    ✅ NEW: Start async job and return job_id immediately
-    """
+    """Start async job and return job_id immediately"""
     try:
         # Get content from request
         request_json = request.get_json()
         if not request_json:
-            return jsonify({
-                "error": "Invalid request format"
-            }), 400
+            return jsonify({"error": "Invalid request format"}), 400
 
         content = request_json.get('html_content') or request_json.get('content')
-
         if not content:
-            return jsonify({
-                "error": "No content provided"
-            }), 400
+            return jsonify({"error": "No content provided"}), 400
 
         fact_logger.logger.info(
-            f"📥 Received fact-check request",
+            "📥 Received fact-check request",
             extra={"content_length": len(content)}
         )
 
-        # ✅ Detect input format
+        # Detect input format
         input_format = detect_input_format(content)
 
-        # ✅ FIX: Type-safe check for web search orchestrator
+        # Type-safe check for web search orchestrator
         if input_format == 'text' and web_search_orchestrator is None:
             return jsonify({
                 "error": "Web search pipeline not available",
-                "message": "TAVILY_API_KEY not configured or initialization failed. Please check your configuration."
+                "message": "TAVILY_API_KEY not configured or initialization failed."
             }), 503
 
-        # ✅ Create job
+        # Create job
         job_id = job_manager.create_job(content)
-
         fact_logger.logger.info(f"✅ Created job: {job_id}")
 
         # ✅ Start background processing
@@ -133,7 +114,6 @@ def check_facts():
             daemon=True
         ).start()
 
-        # ✅ Return job_id immediately
         return jsonify({
             "job_id": job_id,
             "status": "processing",
@@ -149,56 +129,46 @@ def check_facts():
 
 def run_async_task(job_id: str, content: str, input_format: str):
     """
-    ✅ FIXED: Create isolated event loop per thread (gthread workers)
-    Type-safe with proper None checks
+    ✅ FIXED: Uses async_utils pattern - no asyncio.run() errors!
+
+    This matches your other working app's pattern.
     """
     try:
-        # Create completely isolated event loop for this thread
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        if input_format == 'html':
+            fact_logger.logger.info(f"🔗 Job {job_id}: LLM Output pipeline")
+            # ✅ Use run_async_in_thread instead of loop.run_until_complete
+            result = run_async_in_thread(
+                llm_orchestrator.process_with_progress(content, job_id)
+            )
+        else:
+            if web_search_orchestrator is None:
+                raise ValueError("Web search orchestrator not initialized")
 
-        try:
-            if input_format == 'html':
-                fact_logger.logger.info(f"🔗 Job {job_id}: LLM Output pipeline")
-                result = loop.run_until_complete(
-                    llm_orchestrator.process_with_progress(content, job_id)
-                )
-            else:
-                # ✅ FIX: Type-safe call with assertion
-                # We already checked web_search_orchestrator is not None in check_facts()
-                # But we assert here for type safety
-                if web_search_orchestrator is None:
-                    raise ValueError("Web search orchestrator not initialized")
+            fact_logger.logger.info(f"📝 Job {job_id}: Web Search pipeline")
+            # ✅ Use run_async_in_thread instead of loop.run_until_complete
+            result = run_async_in_thread(
+                web_search_orchestrator.process_with_progress(content, job_id)
+            )
 
-                fact_logger.logger.info(f"📝 Job {job_id}: Web Search pipeline")
-                result = loop.run_until_complete(
-                    web_search_orchestrator.process_with_progress(content, job_id)
-                )
-
-            # Store successful result
-            job_manager.complete_job(job_id, result)
-            fact_logger.logger.info(f"✅ Job {job_id} completed successfully")
-
-        finally:
-            # Always clean up the loop
-            loop.close()
+        # Store successful result
+        job_manager.complete_job(job_id, result)
+        fact_logger.logger.info(f"✅ Job {job_id} completed successfully")
 
     except Exception as e:
         fact_logger.log_component_error(f"Job {job_id}", e)
         job_manager.fail_job(job_id, str(e))
 
+    finally:
+        # ✅ Cleanup event loop after job completes
+        cleanup_thread_loop()
+
 @app.route('/api/job/<job_id>', methods=['GET'])
 def get_job_status(job_id: str):
-    """
-    ✅ NEW: Get current job status and result
-    Type-safe with proper None checks
-    """
+    """Get current job status and result"""
     job = job_manager.get_job(job_id)
-
     if not job:
         return jsonify({"error": "Job not found"}), 404
 
-    # ✅ FIX: Type-safe access to job dictionary
     return jsonify({
         "job_id": job_id,
         "status": job.get('status', 'unknown'),
@@ -209,59 +179,56 @@ def get_job_status(job_id: str):
 
 @app.route('/api/job/<job_id>/stream')
 def stream_job_progress(job_id: str):
-    """
-    ✅ NEW: Server-Sent Events stream for real-time progress
-    Type-safe with proper None checks
-    """
+    """Server-Sent Events stream for real-time progress"""
     def generate():
         import time
         import json
 
-        # Get the job
         job = job_manager.get_job(job_id)
         if not job:
             yield f"data: {json.dumps({'error': 'Job not found'})}\n\n"
             return
 
-        # Get progress queue
-        progress_queue = job_manager.get_progress_queue(job_id)
-        if not progress_queue:
-            yield f"data: {json.dumps({'error': 'Progress queue not found'})}\n\n"
+        yield f"data: {json.dumps({'status': job.get('status', 'unknown')})}\n\n"
+
+        queue = job_manager.get_progress_queue(job_id)
+        if not queue:
             return
 
-        # Send initial status
-        yield f"data: {json.dumps({'message': 'Starting fact-check...', 'status': 'processing'})}\n\n"
-
-        # Stream progress updates
-        timeout = 1200  # 20 minutes
-        start_time = time.time()
-
         while True:
-            # Check timeout
-            if time.time() - start_time > timeout:
-                yield f"data: {json.dumps({'error': 'Timeout', 'done': True})}\n\n"
-                break
-
-            # Check if job is done
-            current_job = job_manager.get_job(job_id)
-
-            # ✅ FIX: Type-safe access with None check
-            if current_job and current_job.get('status') in ['completed', 'failed']:
-                yield f"data: {json.dumps({'done': True, 'status': current_job.get('status')})}\n\n"
-                break
-
-            # Get next progress update (non-blocking with timeout)
             try:
-                progress_item = progress_queue.get(timeout=1)
-                yield f"data: {json.dumps(progress_item)}\n\n"
-            except queue.Empty:
-                # Send heartbeat to keep connection alive
-                yield f"data: {json.dumps({'heartbeat': True})}\n\n"
+                current_job = job_manager.get_job(job_id)
+                if current_job and current_job.get('status') in ['completed', 'failed']:
+                    yield f"data: {json.dumps({
+                        'status': current_job['status'],
+                        'result': current_job.get('result'),
+                        'error': current_job.get('error')
+                    })}\n\n"
+                    break
 
-    return Response(generate(), mimetype='text/event-stream')
+                try:
+                    progress = queue.get(timeout=1)
+                    yield f"data: {json.dumps(progress)}\n\n"
+                except:
+                    yield f"data: {json.dumps({'heartbeat': True})}\n\n"
 
-@app.route('/api/health', methods=['GET'])
-def health_check():
+            except GeneratorExit:
+                break
+            except Exception as e:
+                fact_logger.logger.error(f"Stream error: {e}")
+                break
+
+    return Response(
+        generate(),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no'
+        }
+    )
+
+@app.route('/health')
+def health():
     """Health check endpoint for Railway"""
     return jsonify({
         "status": "healthy",
@@ -308,5 +275,6 @@ if __name__ == '__main__':
     app.run(
         host='0.0.0.0',
         port=port,
-        debug=debug
+        debug=debug,
+        threaded=True
     )

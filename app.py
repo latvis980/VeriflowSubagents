@@ -1,4 +1,4 @@
-# app.py - WITH STREAMING SUPPORT
+# app.py - WITH STREAMING
 from flask import Flask, render_template, request, jsonify, Response
 import asyncio
 import os

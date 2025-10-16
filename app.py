@@ -14,6 +14,9 @@ from utils.langsmith_config import langsmith_config
 from utils.job_manager import job_manager
 from utils.async_utils import run_async_in_thread, cleanup_thread_loop  # ✅ NEW
 
+import nest_asyncio
+nest_asyncio.apply()
+
 # Load environment variables
 load_dotenv()
 

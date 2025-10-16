@@ -130,37 +130,26 @@ def check_facts():
         }), 500
 
 def run_async_task(job_id: str, content: str, input_format: str):
-    """
-    ✅ Create isolated event loop per thread
-    """
+    """Create isolated event loop per thread"""
     try:
-        # Create completely new event loop for this thread
+        # Fresh loop for this thread
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
         try:
-            # Route to pipeline
             if input_format == 'html':
-                fact_logger.logger.info(f"🔗 Job {job_id}: Using LLM Output pipeline")
                 result = loop.run_until_complete(
                     llm_orchestrator.process_with_progress(content, job_id)
                 )
             else:
-                fact_logger.logger.info(f"📝 Job {job_id}: Using Web Search pipeline")
                 result = loop.run_until_complete(
                     web_search_orchestrator.process(content, job_id)
                 )
-
-            # Store result
             job_manager.complete_job(job_id, result)
-            fact_logger.logger.info(f"✅ Job {job_id} completed successfully")
-
         finally:
-            # Clean up the loop
-            loop.close()
+            loop.close()  # Critical: cleanup
 
     except Exception as e:
-        fact_logger.log_component_error(f"Job {job_id}", e)
         job_manager.fail_job(job_id, str(e))
 
 @app.route('/api/job/<job_id>', methods=['GET'])

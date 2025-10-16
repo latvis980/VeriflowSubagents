@@ -227,7 +227,7 @@ def stream_job_progress(job_id: str):
         }
     )
 
-@app.route('/health')
+@app.route('/api/health')
 def health():
     """Health check endpoint for Railway"""
     return jsonify({

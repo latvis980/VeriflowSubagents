@@ -3,6 +3,8 @@ from langsmith import Client
 from langchain.callbacks import LangChainTracer
 from langchain.callbacks.manager import CallbackManager
 import os
+import threading
+import asyncio
 from typing import Optional
 
 class LangSmithConfig:
@@ -28,15 +30,39 @@ class LangSmithConfig:
                 self.fact_logger.logger.error(f"❌ Failed to create LangSmith project: {create_error}")
 
     def get_callbacks(self, run_name: Optional[str] = None):
-        """Get callback manager with LangSmith tracer"""
+        """
+        Get callback manager with LangSmith tracer
+
+        ✅ FIX: Disable callbacks in daemon threads to avoid asyncio.run() conflicts
+
+        Note: To set custom run names, pass them in the config when calling ainvoke():
+        chain.ainvoke({...}, config={"run_name": "MyCustomName", "callbacks": callbacks.handlers})
+        """
+        # Check if we're in a daemon thread (background job)
+        current_thread = threading.current_thread()
+        is_daemon = current_thread.daemon
+
+        # Also check if we're already in an event loop
+        try:
+            loop = asyncio.get_running_loop()
+            in_event_loop = True
+        except RuntimeError:
+            in_event_loop = False
+
+        # ✅ CRITICAL FIX: Return empty callbacks in daemon threads
+        # This prevents LangSmith from trying to call asyncio.run() while
+        # we're already in an async context
+        if is_daemon or in_event_loop:
+            self.fact_logger.logger.debug(
+                f"📊 Skipping LangSmith callbacks (daemon={is_daemon}, in_loop={in_event_loop})"
+            )
+            return CallbackManager([])
+
+        # Normal callback creation for main thread
         tracer = LangChainTracer(
             project_name=self.project_name,
             client=self.client
         )
-
-        # Only set name if run_name is provided (not None)
-        if run_name is not None:
-            tracer.name = run_name
 
         return CallbackManager([tracer])
 

@@ -10,6 +10,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from googleapiclient.errors import HttpError
 import os
+import sys  # ✅ ADDED: Needed for checking interactive environment
 import base64
 from pathlib import Path
 import json
@@ -51,6 +52,32 @@ class GoogleDriveUploader:
             logger.warning("⚠️ GDRIVE_FOLDER_ID not set. Files will be uploaded to Drive root.")
 
         logger.info("🔧 Initializing Google Drive uploader")
+
+    def _is_interactive_environment(self) -> bool:
+        """
+        ✅ NEW: Check if we're in an interactive environment
+
+        Returns False for:
+        - Railway deployments
+        - Docker containers
+        - Any environment without a TTY
+        """
+        # Check if stdin is a TTY (terminal)
+        if not sys.stdin.isatty():
+            logger.debug("Non-interactive: No TTY detected")
+            return False
+
+        # Check for Railway or similar deployment environments
+        if os.getenv('RAILWAY_ENVIRONMENT') or os.getenv('RENDER'):
+            logger.debug("Non-interactive: Deployment environment detected")
+            return False
+
+        # Check if we're in a Docker container
+        if os.path.exists('/.dockerenv'):
+            logger.debug("Non-interactive: Docker environment detected")
+            return False
+
+        return True
 
     def _setup_credentials_file(self, credentials_path: str):
         """
@@ -125,12 +152,26 @@ class GoogleDriveUploader:
                 logger.info("🔄 Refreshing expired credentials")
                 creds.refresh(Request())
                 logger.info("✅ Credentials refreshed successfully")
+
+                # ✅ NEW: Save refreshed token back to file
+                with open(self.token_path, 'w') as token:
+                    token.write(creds.to_json())
+                logger.info("💾 Saved refreshed token")
+
             except Exception as e:
                 logger.error(f"❌ Failed to refresh credentials: {e}")
                 creds = None
 
         # Need new authentication
         if not creds or not creds.valid:
+
+            # ✅ NEW: Check if we're in a non-interactive environment
+            if not self._is_interactive_environment():
+                logger.error("❌ Cannot authenticate in non-interactive environment (Railway/Docker)")
+                logger.error("🔧 REQUIRED: Set GOOGLE_TOKEN_BASE64 environment variable")
+                logger.error("📋 Generate token locally with: python setup_gdrive_token.py")
+                return False
+
             logger.info("🔐 Starting OAuth flow")
 
             if not os.path.exists(self.credentials_path):
@@ -151,7 +192,9 @@ class GoogleDriveUploader:
                         port=0,
                         authorization_prompt_message='',
                         success_message='Authentication successful! You can close this window.',
-                        open_browser=True
+                        open_browser=True,
+                        access_type='offline',  # ✅ ADDED: Get refresh token
+                        prompt='consent'  # ✅ ADDED: Force consent for refresh token
                     )
                     logger.info("✅ Browser authentication successful")
 
@@ -160,7 +203,10 @@ class GoogleDriveUploader:
                     logger.warning(f"⚠️ Browser authentication failed: {server_error}")
                     logger.info("🔄 Switching to manual authorization flow")
 
-                    auth_url, _ = flow.authorization_url(prompt='consent')
+                    auth_url, _ = flow.authorization_url(
+                        prompt='consent',
+                        access_type='offline'  # ✅ ADDED: Get refresh token
+                    )
                     print(f"\n🔗 Visit this URL:\n{auth_url}\n")
 
                     code = input('Enter the authorization code: ').strip()

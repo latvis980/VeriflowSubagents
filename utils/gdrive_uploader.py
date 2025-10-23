@@ -10,7 +10,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from googleapiclient.errors import HttpError
 import os
-import sys  # ✅ ADDED: Needed for checking interactive environment
+import sys 
 import base64
 from pathlib import Path
 import json

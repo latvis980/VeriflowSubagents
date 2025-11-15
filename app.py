@@ -9,10 +9,11 @@ from dotenv import load_dotenv
 # Import your components
 from orchestrator.llm_output_orchestrator import FactCheckOrchestrator
 from orchestrator.web_search_orchestrator import WebSearchOrchestrator
+from orchestrator.bias_check_orchestrator import BiasCheckOrchestrator
 from utils.logger import fact_logger
 from utils.langsmith_config import langsmith_config
 from utils.job_manager import job_manager
-from utils.async_utils import run_async_in_thread, cleanup_thread_loop  # ✅ NEW
+from utils.async_utils import run_async_in_thread, cleanup_thread_loop
 
 import nest_asyncio
 nest_asyncio.apply()
@@ -55,6 +56,15 @@ if config.tavily_api_key:
         fact_logger.logger.error(f"❌ Failed to initialize Web Search Orchestrator: {e}")
         fact_logger.logger.warning("⚠️ Web search pipeline will not be available")
         web_search_orchestrator = None
+
+# Initialize Bias Check Orchestrator (INDEPENDENT of Tavily)
+bias_orchestrator: Optional[BiasCheckOrchestrator] = None
+try:
+    bias_orchestrator = BiasCheckOrchestrator(config)
+    fact_logger.logger.info("✅ Bias Check Orchestrator initialized successfully")
+except Exception as e:
+    fact_logger.logger.error(f"❌ Failed to initialize Bias Check Orchestrator: {e}")
+    bias_orchestrator = None
 
 # Helper function for input detection
 def detect_input_format(content: str) -> str:
@@ -130,12 +140,92 @@ def check_facts():
             "message": "An error occurred during fact checking"
         }), 500
 
-def run_async_task(job_id: str, content: str, input_format: str):
-    """
-    ✅ FIXED: Uses async_utils pattern - no asyncio.run() errors!
+@app.route('/api/check-bias', methods=['POST'])
+def check_bias():
+    '''Check text for political and other biases using multiple LLMs'''
+    try:
+        # Get content from request
+        request_json = request.get_json()
+        if not request_json:
+            return jsonify({"error": "Invalid request format"}), 400
 
-    This matches your other working app's pattern.
-    """
+        text = request_json.get('text') or request_json.get('content')
+        publication_name = request_json.get('publication_name')
+
+        if not text:
+            return jsonify({"error": "No text provided"}), 400
+
+        # Check if bias orchestrator is available
+        if bias_orchestrator is None:
+            return jsonify({
+                "error": "Bias checking not available",
+                "message": "Bias Check Orchestrator initialization failed"
+            }), 503
+
+        fact_logger.logger.info(
+            "📊 Received bias-check request",
+            extra={
+                "text_length": len(text),
+                "has_publication": publication_name is not None
+            }
+        )
+
+        # Create job
+        job_id = job_manager.create_job(text)
+        fact_logger.logger.info(f"✅ Created bias check job: {job_id}")
+
+        # Start background processing
+        threading.Thread(
+            target=run_bias_check_task,
+            args=(job_id, text, publication_name),
+            daemon=True
+        ).start()
+
+        return jsonify({
+            "job_id": job_id,
+            "status": "processing",
+            "message": "Bias checking started"
+        })
+
+    except Exception as e:
+        fact_logger.log_component_error("Flask Bias Check API", e)
+        return jsonify({
+            "error": str(e),
+            "message": "An error occurred during bias checking"
+        }), 500
+
+
+def run_bias_check_task(job_id: str, text: str, publication_name: Optional[str]):
+    '''
+    Run bias check in background thread
+    Uses the same async pattern as run_async_task
+    '''
+    try:
+        fact_logger.logger.info(f"🔄 Starting bias check job: {job_id}")
+
+        # ✅ ADD THIS CHECK
+        if bias_orchestrator is None:
+            raise ValueError("Bias orchestrator not initialized")
+
+        # Run the async orchestrator
+        result = run_async_in_thread(
+            bias_orchestrator.process_with_progress(
+                text=text,
+                publication_name=publication_name,
+                job_id=job_id
+            )
+        )
+
+        fact_logger.logger.info(f"✅ Bias check job completed: {job_id}")
+
+    except Exception as e:
+        fact_logger.logger.error(f"❌ Bias check job failed: {job_id} - {e}")
+        job_manager.fail_job(job_id, str(e))
+    finally:
+        cleanup_thread_loop()
+
+def run_async_task(job_id: str, content: str, input_format: str):
+    """✅ FIXED: Uses async_utils pattern - no asyncio.run() errors! This matches your other working app's pattern."""
     try:
         if input_format == 'html':
             fact_logger.logger.info(f"🔗 Job {job_id}: LLM Output pipeline")
@@ -232,7 +322,7 @@ def stream_job_progress(job_id: str):
 
 @app.route('/api/health')
 def health():
-    """Health check endpoint for Railway"""
+    '''Health check endpoint for Railway'''
     return jsonify({
         "status": "healthy",
         "langsmith_enabled": os.getenv('LANGCHAIN_TRACING_V2') == 'true',
@@ -240,7 +330,8 @@ def health():
         "tavily_configured": bool(os.getenv('TAVILY_API_KEY')),
         "pipelines": {
             "llm_output": True,
-            "web_search": web_search_orchestrator is not None
+            "web_search": web_search_orchestrator is not None,
+            "bias_check": bias_orchestrator is not None  # ✅ NEW
         }
     })
 
@@ -274,6 +365,11 @@ if __name__ == '__main__':
         fact_logger.logger.info("✅ Both pipelines available: LLM Output & Web Search")
     else:
         fact_logger.logger.warning("⚠️ Only LLM Output pipeline available (check TAVILY_API_KEY)")
+
+    if bias_orchestrator:
+        fact_logger.logger.info("✅ Bias Check Orchestrator available")
+    else:
+        fact_logger.logger.warning("⚠️ Bias Check Orchestrator not available")
 
     app.run(
         host='0.0.0.0',

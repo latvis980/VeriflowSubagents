@@ -8,7 +8,7 @@ langchain>=0.3.0,<0.4.0
 # LangChain OpenAI Integration - Version 0.3.x  
 langchain-openai>=0.3.0,<0.4.0
 
-# LangChain Anthropic Integration - Version 0.3.x (ADDED)
+# LangChain Anthropic Integration - Version 0.3.x
 langchain-anthropic>=0.3.0,<0.4.0
 
 # Web search
@@ -31,8 +31,11 @@ nest-asyncio==1.6.0
 # For Railway deployment
 gunicorn==21.2.0
 
-# Google Drive Integration
-google-auth==2.23.0
-google-auth-oauthlib==1.1.0
-google-auth-httplib2==0.1.1
-google-api-python-client==2.100.0
+# ✅ NEW: Cloudflare R2 Storage (S3-compatible)
+boto3>=1.28.0
+
+# ❌ REMOVED: Google Drive Integration (replaced by R2)
+# google-auth==2.23.0
+# google-auth-oauthlib==1.1.0
+# google-auth-httplib2==0.1.1
+# google-api-python-client==2.100.0

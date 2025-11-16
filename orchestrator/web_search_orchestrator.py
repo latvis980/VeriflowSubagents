@@ -198,20 +198,27 @@ class WebSearchOrchestrator:
 
             results.sort(key=lambda x: x.match_score)
 
-            # Save
+            # Save and upload to R2
             job_manager.add_progress(job_id, "💾 Saving results...")
             all_scraped_content = {}
             for fact_scraped in scraped_content_by_fact.values():
                 all_scraped_content.update(fact_scraped)
 
-            # ✅ NEW: Include queries in the report
-            self.file_manager.save_session_content(
+            # ✅ CHANGED: Capture upload result and use upload_to_r2
+            upload_result = self.file_manager.save_session_content(
                 session_id,
                 all_scraped_content,
                 facts,
-                upload_to_drive=True,
-                queries_by_fact=all_queries_by_fact  # ✅ Pass the generated queries
+                upload_to_r2=True,  
+                queries_by_fact=all_queries_by_fact
             )
+
+            # ✅ NEW: Add progress message about upload status
+            if upload_result and upload_result.get('success'):
+                job_manager.add_progress(job_id, "☁️ Report uploaded to R2")
+            else:
+                error_msg = upload_result.get('error', 'Unknown error') if upload_result else 'Upload returned no result'
+                job_manager.add_progress(job_id, f"⚠️ R2 upload failed: {error_msg}")
 
             summary = self._generate_summary(results)
             duration = time.time() - start_time
@@ -231,6 +238,12 @@ class WebSearchOrchestrator:
                     "credible_sources_identified": total_credible,
                     "sources_scraped": len(all_scraped_content),
                     "successful_scrapes": len([c for c in all_scraped_content.values() if c])
+                },
+                "r2_upload": {
+                    "success": upload_result.get('success', False) if upload_result else False,
+                    "url": upload_result.get('url') if upload_result else None,
+                    "filename": upload_result.get('filename') if upload_result else None,
+                    "error": upload_result.get('error') if upload_result else None
                 },
                 "langsmith_url": f"https://smith.langchain.com/projects/p/{langsmith_config.project_name}"
             }

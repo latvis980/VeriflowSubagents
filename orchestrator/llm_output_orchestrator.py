@@ -23,6 +23,7 @@ from agents.browserless_scraper import FactCheckScraper
 from agents.fact_checker import FactChecker
 from agents.fact_extractor import FactAnalyzer
 from agents.highlighter import Highlighter
+from utils.job_manager import job_manager
 
 class FactCheckOrchestrator:
     """Orchestrator using global source checking approach with semantic excerpt extraction"""
@@ -79,14 +80,27 @@ class FactCheckOrchestrator:
                 f"✅ Successfully scraped {successful_scrapes}/{len(unique_urls)} sources"
             )
 
-            # Step 4: Save session content
+            # Step 4: Save session content and upload to R2
             fact_logger.logger.info("💾 Step 4: Saving session content")
-            self.file_manager.save_session_content(
+            upload_result = self.file_manager.save_session_content(
                 session_id, 
                 all_scraped_content,
                 facts,
-                upload_to_drive=True  # ✅ Enable Google Drive upload
+                upload_to_r2=True  # ✅ CHANGED: upload_to_drive → upload_to_r2
             )
+
+            # ✅ NEW: Add progress message about upload status
+            if upload_result and upload_result.get('success'):
+                job_manager.add_progress(
+                    job_id, 
+                    f"☁️ Report uploaded to R2"
+                )
+            else:
+                error_msg = upload_result.get('error', 'Unknown error') if upload_result else 'Upload returned no result'
+                job_manager.add_progress(
+                    job_id, 
+                    f"⚠️ R2 upload failed: {error_msg}"
+                )
 
             # Step 5: Check each fact using SEMANTIC excerpt extraction
             fact_logger.logger.info(
@@ -149,8 +163,6 @@ class FactCheckOrchestrator:
             fact_logger.log_component_error("FactCheckOrchestrator", e, session_id=session_id)
             raise
 
-    # orchestrator/llm_output_orchestrator.py - Add progress method
-
     async def process_with_progress(self, html_content: str, job_id: str) -> dict:
         """Process with real-time progress updates"""
         from utils.job_manager import job_manager
@@ -209,7 +221,14 @@ class FactCheckOrchestrator:
 
             # Save and finish
             job_manager.add_progress(job_id, "💾 Saving results...")
-            self.file_manager.save_session_content(session_id, all_scraped_content, facts, upload_to_drive=True)
+
+            # ✅ CHANGED: Capture upload result (this is a second save, consider removing if duplicate)
+            upload_result = self.file_manager.save_session_content(
+                session_id, 
+                all_scraped_content, 
+                facts, 
+                upload_to_r2=True  # ✅ CHANGED: upload_to_drive → upload_to_r2
+            )
 
             summary = self._generate_summary(results)
             duration = time.time() - start_time
@@ -222,7 +241,14 @@ class FactCheckOrchestrator:
                 "total_sources_scraped": len(unique_urls),
                 "successful_scrapes": successful_scrapes,
                 "methodology": "global_source_checking_semantic",
-                "langsmith_url": f"https://smith.langchain.com/projects/p/{langsmith_config.project_name}"
+                "langsmith_url": f"https://smith.langchain.com/projects/p/{langsmith_config.project_name}",
+                # ✅ NEW: Add R2 upload status
+                "r2_upload": {
+                    "success": upload_result.get('success', False) if upload_result else False,
+                    "url": upload_result.get('url') if upload_result else None,
+                    "filename": upload_result.get('filename') if upload_result else None,
+                    "error": upload_result.get('error') if upload_result else None
+                }
             }
 
         except Exception as e:

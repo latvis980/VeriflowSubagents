@@ -203,6 +203,7 @@ async function runBiasCheck(content) {
 
 /**
  * Stream job progress using Server-Sent Events
+ * FIXED VERSION - handles the actual progress item format from backend
  */
 function streamJobProgress(jobId, emoji = '⏳') {
     return new Promise((resolve, reject) => {
@@ -212,18 +213,37 @@ function streamJobProgress(jobId, emoji = '⏳') {
         eventSource.onmessage = (event) => {
             const data = JSON.parse(event.data);
 
-            if (data.status === 'processing') {
-                // Add progress message
-                if (data.message) {
-                    addProgress(emoji + ' ' + data.message);
-                }
-            } else if (data.status === 'completed') {
+            // Handle heartbeat (no action needed)
+            if (data.heartbeat) {
+                return;
+            }
+
+            // Handle error
+            if (data.error) {
+                eventSource.close();
+                reject(new Error(data.error));
+                return;
+            }
+
+            // Handle completed status
+            if (data.status === 'completed') {
                 addProgress('✅ Analysis complete!');
                 eventSource.close();
                 resolve(data.result);
-            } else if (data.status === 'failed') {
+                return;
+            }
+
+            // Handle failed status
+            if (data.status === 'failed') {
                 eventSource.close();
                 reject(new Error(data.error || 'Job failed'));
+                return;
+            }
+
+            // Handle progress items (the actual format from backend)
+            // Progress items have: {timestamp, message, details}
+            if (data.message) {
+                addProgress(emoji + ' ' + data.message);
             }
         };
 

@@ -1,0 +1,198 @@
+# agents/llm_output_verifier.py
+"""
+LLM Output Verifier Agent
+Verifies if an LLM accurately interpreted its cited sources
+
+USAGE: LLM Output Pipeline ONLY
+- Checks interpretation accuracy, not source credibility
+- Compares LLM's claim against actual source content
+- NO tier filtering (sources already provided by LLM)
+"""
+
+from langsmith import traceable
+from langchain_openai import ChatOpenAI
+from langchain.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import JsonOutputParser
+from pydantic import BaseModel, Field
+from typing import List, Dict, Optional
+import time
+
+from utils.logger import fact_logger
+from utils.langsmith_config import langsmith_config
+from agents.fact_extractor import Fact
+
+
+class LLMVerificationResult(BaseModel):
+    """Result of LLM output verification"""
+    fact_id: str
+    claim: str
+    verification_score: float = Field(ge=0.0, le=1.0)
+    assessment: str
+    interpretation_issues: List[str] = Field(default_factory=list)
+    wording_comparison: Dict
+    confidence: float = Field(ge=0.0, le=1.0)
+    reasoning: str
+
+
+class LLMOutputVerifier:
+    """
+    Verifies if an LLM accurately interpreted its cited sources
+    
+    Key Difference from FactChecker:
+    - FactChecker: Checks if facts are TRUE (uses tier filtering)
+    - LLMOutputVerifier: Checks if LLM INTERPRETED sources correctly (no tier filtering)
+    """
+
+    def __init__(self, config):
+        self.config = config
+        
+        # Use GPT-4o for verification (needs strong reasoning)
+        self.llm = ChatOpenAI(
+            model="gpt-4o",
+            temperature=0
+        ).bind(response_format={"type": "json_object"})
+
+        self.parser = JsonOutputParser(pydantic_object=LLMVerificationResult)
+
+        # ✅ Import prompts HERE (inside the agent)
+        from prompts.llm_output_verification_prompts import get_llm_verification_prompts
+        self.prompts = get_llm_verification_prompts()
+
+        fact_logger.log_component_start("LLMOutputVerifier", model="gpt-4o")
+
+    @traceable(
+        name="verify_llm_interpretation",
+        run_type="chain",
+        tags=["llm-verification", "interpretation-check"]
+    )
+    async def verify_interpretation(
+        self,
+        fact: Fact,
+        excerpts_by_url: Dict[str, List[Dict]],
+        scraped_content: Dict[str, str]
+    ) -> LLMVerificationResult:
+        """
+        Verify if LLM accurately interpreted its cited source
+        
+        Args:
+            fact: The Fact object with the LLM's claim
+            excerpts_by_url: Excerpts extracted by Highlighter {url: [excerpts]}
+            scraped_content: Full source content {url: content}
+            
+        Returns:
+            LLMVerificationResult with verification assessment
+        """
+        start_time = time.time()
+        
+        fact_logger.logger.info(
+            f"🔍 Verifying LLM interpretation for {fact.id}",
+            extra={"fact_id": fact.id, "num_sources": len(excerpts_by_url)}
+        )
+
+        # Get the primary source (usually the first one cited)
+        primary_url = fact.sources[0] if fact.sources else None
+        
+        if not primary_url or primary_url not in scraped_content:
+            fact_logger.logger.warning(
+                f"⚠️ Primary source not available for {fact.id}",
+                extra={"fact_id": fact.id, "url": primary_url}
+            )
+            return self._create_error_result(fact, "Source not available")
+
+        # Get excerpts and full content
+        excerpts = excerpts_by_url.get(primary_url, [])
+        full_content = scraped_content[primary_url]
+
+        # Format excerpts for prompt
+        excerpts_text = self._format_excerpts(excerpts)
+
+        # Truncate full content if too long (keep first 100K chars)
+        content_preview = full_content[:100000]
+        if len(full_content) > 100000:
+            content_preview += "\n\n[... content truncated ...]"
+
+        # Call LLM for verification
+        result = await self._verify_with_llm(
+            fact,
+            excerpts_text,
+            content_preview
+        )
+
+        duration = time.time() - start_time
+        fact_logger.log_component_complete(
+            "LLMOutputVerifier",
+            duration,
+            fact_id=fact.id,
+            verification_score=result.verification_score
+        )
+
+        return result
+
+    def _format_excerpts(self, excerpts: List[Dict]) -> str:
+        """Format excerpts for prompt"""
+        if not excerpts:
+            return "No excerpts found"
+
+        formatted = []
+        for i, ex in enumerate(excerpts, 1):
+            formatted.append(
+                f"EXCERPT #{i} (Relevance: {ex.get('relevance', 0):.2f}):\n"
+                f"{ex.get('quote', '')}\n"
+            )
+
+        return "\n".join(formatted)
+
+    @traceable(name="llm_verification_call", run_type="llm")
+    async def _verify_with_llm(
+        self,
+        fact: Fact,
+        excerpts_text: str,
+        source_content: str
+    ) -> LLMVerificationResult:
+        """Call LLM for verification"""
+
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", self.prompts["system"]),
+            ("user", self.prompts["user"] + "\n\n{format_instructions}")
+        ])
+
+        prompt_with_format = prompt.partial(
+            format_instructions=self.parser.get_format_instructions()
+        )
+
+        callbacks = langsmith_config.get_callbacks(f"llm_verifier_{fact.id}")
+        chain = prompt_with_format | self.llm | self.parser
+
+        response = await chain.ainvoke(
+            {
+                "claim": fact.statement,
+                "original_text": fact.original_text,
+                "excerpts": excerpts_text,
+                "source_content": source_content
+            },
+            config={"callbacks": callbacks.handlers}
+        )
+
+        return LLMVerificationResult(
+            fact_id=fact.id,
+            claim=fact.statement,
+            verification_score=response['verification_score'],
+            assessment=response['assessment'],
+            interpretation_issues=response.get('interpretation_issues', []),
+            wording_comparison=response.get('wording_comparison', {}),
+            confidence=response['confidence'],
+            reasoning=response['reasoning']
+        )
+
+    def _create_error_result(self, fact: Fact, error_msg: str) -> LLMVerificationResult:
+        """Create error result when verification can't be performed"""
+        return LLMVerificationResult(
+            fact_id=fact.id,
+            claim=fact.statement,
+            verification_score=0.0,
+            assessment=f"ERROR: {error_msg}",
+            interpretation_issues=[error_msg],
+            wording_comparison={},
+            confidence=0.0,
+            reasoning=f"Could not verify: {error_msg}"
+        )

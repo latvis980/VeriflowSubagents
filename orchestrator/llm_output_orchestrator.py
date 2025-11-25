@@ -1,261 +1,209 @@
-# orchestrator/llm_output_orchestrator.py
+# orchestrator/llm_interpretation_orchestrator.py
 """
-Orchestrator - Fixed Version with Semantic Excerpt Extraction
+LLM Interpretation Verification Orchestrator
 
-KEY FIXES:
-1. Uses Highlighter for semantic excerpt extraction (instead of keyword matching)
-2. Removed the broken _find_relevant_excerpts_in_text() method
-3. Increased context window for highlighter
+PURPOSE: Verify if LLMs (ChatGPT, Perplexity) accurately interpreted their cited sources
+
+PROCESS 1: LLM Output Verification
+- Input: LLM output WITH embedded source links
+- Goal: Check if LLM claims match what sources actually say
+- Method: Compare LLM's interpretation against actual source content
+- NO web search (sources already provided by LLM)
+- NO tier filtering (sources already provided by LLM)
+- NO fact-checking (just interpretation verification)
+
+For fact-checking ANY text, use web_search_orchestrator.py instead.
 """
 
 from langsmith import traceable
 import time
-import asyncio
-import os
 
 from utils.html_parser import HTMLParser
 from utils.file_manager import FileManager
 from utils.logger import fact_logger
 from utils.langsmith_config import langsmith_config
 
-# Import your existing components
 from agents.browserless_scraper import FactCheckScraper
-from agents.fact_checker import FactChecker
 from agents.fact_extractor import FactAnalyzer
 from agents.highlighter import Highlighter
+from agents.llm_output_verifier import LLMOutputVerifier
 from utils.job_manager import job_manager
 
-class FactCheckOrchestrator:
-    """Orchestrator using global source checking approach with semantic excerpt extraction"""
+
+class LLMInterpretationOrchestrator:
+    """
+    Verify LLM interpretation accuracy
+
+    Pipeline:
+    1. Parse LLM output (ChatGPT, Perplexity, etc.)
+    2. Extract claims made by the LLM
+    3. Scrape the sources that LLM cited
+    4. Extract relevant excerpts from sources
+    5. Verify if LLM interpreted those sources correctly
+
+    Does NOT do fact-checking or web search.
+    Does NOT evaluate source credibility (sources provided by LLM).
+
+    Output: Interpretation quality scores only.
+    """
 
     def __init__(self, config):
         self.config = config
         self.parser = HTMLParser()
-        self.analyzer = FactAnalyzer(config) 
+        self.analyzer = FactAnalyzer(config)
         self.scraper = FactCheckScraper(config)
-        self.checker = FactChecker(config)
-        self.highlighter = Highlighter(config)  # ✅ NEW: Initialize highlighter
+        self.highlighter = Highlighter(config)
+        self.verifier = LLMOutputVerifier(config)  # ✅ Interpretation verifier
         self.file_manager = FileManager()
 
-        fact_logger.log_component_start("FactCheckOrchestrator")
+        fact_logger.log_component_start("LLMInterpretationOrchestrator")
+
+    def _check_cancellation(self, job_id: str):
+        """Check if job has been cancelled"""
+        if job_manager.is_cancelled(job_id):
+            raise Exception("Job cancelled by user")
 
     @traceable(
-        name="fact_check_pipeline",
+        name="llm_interpretation_verification",
         run_type="chain",
-        tags=["orchestrator", "global-checking", "semantic-extraction"]
+        tags=["llm-verification", "interpretation-only", "no-fact-checking"]
     )
-    async def process(self, html_content: str) -> dict:
+    async def process_with_progress(self, html_content: str, job_id: str) -> dict:
         """
-        Improved pipeline with semantic excerpt extraction
+        Verify LLM interpretation with real-time progress
+
+        Returns interpretation quality scores (NOT fact-checking scores)
         """
         session_id = self.file_manager.create_session()
         start_time = time.time()
 
         fact_logger.logger.info(
-            f"🚀 STARTING FACT-CHECK SESSION: {session_id}",
-            extra={"session_id": session_id, "input_length": len(html_content)}
+            f"🔍 STARTING LLM INTERPRETATION VERIFICATION: {session_id}",
+            extra={"session_id": session_id, "process": "interpretation_verification"}
         )
 
         try:
-            # Step 1: Parse input
-            fact_logger.logger.info("📄 Step 1: Parsing HTML input")
+            # Step 1: Parse LLM output
+            job_manager.add_progress(job_id, "📄 Parsing LLM output...")
+            self._check_cancellation(job_id)
             parsed = await self._traced_parse(html_content)
 
-            # Step 2: Extract facts AND get all source URLs
-            fact_logger.logger.info("🔍 Step 2: Extracting facts")
-            facts, all_source_urls = await self.analyzer.analyze(parsed)
-
-            fact_logger.logger.info(
-                f"✅ Extracted {len(facts)} facts from {len(all_source_urls)} total sources"
-            )
-
-            # Step 3: Scrape ALL sources once (no duplicates)
-            unique_urls = list(set(all_source_urls))
-            fact_logger.logger.info(f"🌐 Step 3: Scraping {len(unique_urls)} unique sources")
-
-            all_scraped_content = await self.scraper.scrape_urls_for_facts(unique_urls)
-            successful_scrapes = len([v for v in all_scraped_content.values() if v])
-
-            fact_logger.logger.info(
-                f"✅ Successfully scraped {successful_scrapes}/{len(unique_urls)} sources"
-            )
-
-            # Step 4: Save session content and upload to R2
-            fact_logger.logger.info("💾 Step 4: Saving session content")
-            upload_result = self.file_manager.save_session_content(
-                session_id, 
-                all_scraped_content,
-                facts,
-                upload_to_r2=True  # ✅ CHANGED: upload_to_drive → upload_to_r2
-            )
-
-            # Log upload status (no job_id in this method, so use logger)
-            if upload_result and upload_result.get('success'):
-                fact_logger.logger.info("☁️ Report uploaded to R2")
-            else:
-                error_msg = upload_result.get('error', 'Unknown error') if upload_result else 'Upload returned no result'
-                fact_logger.logger.warning(f"⚠️ R2 upload failed: {error_msg}")
-
-            # Step 5: Check each fact using SEMANTIC excerpt extraction
-            fact_logger.logger.info(
-                f"⚖️ Step 5: Checking {len(facts)} facts with semantic excerpt extraction"
-            )
-            results = []
-
-            for i, fact in enumerate(facts, 1):
-                fact_logger.logger.info(f"Processing fact {i}/{len(facts)}: {fact.id}")
-
-                # ✅ NEW: Use highlighter for semantic excerpt extraction
-                excerpts = await self._extract_relevant_excerpts_semantic(
-                    fact, 
-                    all_scraped_content
-                )
-
-                # Check accuracy using your existing fact checker
-                check_result = await self.checker.check_fact(fact, excerpts)
-                results.append(check_result)
-
-                fact_logger.logger.info(
-                    f"✅ Fact {fact.id} checked: score={check_result.match_score:.2f}",
-                    extra={
-                        "fact_id": fact.id,
-                        "score": check_result.match_score,
-                        "excerpts_found": sum(len(v) for v in excerpts.values())
-                    }
-                )
-
-            # Sort facts by score (lowest first)
-            results.sort(key=lambda x: x.match_score)
-
-            # Generate summary
-            summary = self._generate_summary(results)
-            duration = time.time() - start_time
-
-            fact_logger.logger.info(
-                f"🎉 SESSION COMPLETE: {session_id}",
-                extra={
-                    "session_id": session_id,
-                    "duration": duration,
-                    "total_facts": len(results),
-                    "total_sources": len(unique_urls),
-                    "avg_score": summary['avg_score']
-                }
-            )
-
-            return {
-                "session_id": session_id,
-                "facts": [r.dict() for r in results],
-                "summary": summary,
-                "duration": duration,
-                "total_sources_scraped": len(unique_urls),
-                "successful_scrapes": successful_scrapes,
-                "methodology": "global_source_checking_semantic",
-                "langsmith_url": f"https://smith.langchain.com/projects/p/{langsmith_config.project_name}"
-            }
-
-        except Exception as e:
-            fact_logger.log_component_error("FactCheckOrchestrator", e, session_id=session_id)
-            raise
-
-    def _check_cancellation(self, job_id: str):
-        """Check if job has been cancelled and raise exception if so"""
-        from utils.job_manager import job_manager
-        if job_manager.is_cancelled(job_id):
-            raise Exception("Job cancelled by user")
-
-    async def process_with_progress(self, html_content: str, job_id: str) -> dict:
-        """Process with real-time progress updates"""
-        from utils.job_manager import job_manager
-
-        session_id = self.file_manager.create_session()
-        start_time = time.time()
-
-        try:
-            # Step 1: Parse
-            job_manager.add_progress(job_id, "📄 Parsing HTML input...")
-            self._check_cancellation(job_id) 
-            parsed = await self._traced_parse(html_content)
-
-            # Step 2: Extract facts
-            job_manager.add_progress(job_id, "🔍 Extracting verifiable facts...")
-            self._check_cancellation(job_id) 
+            # Step 2: Extract claims made by LLM
+            job_manager.add_progress(job_id, "🔍 Extracting LLM claims...")
+            self._check_cancellation(job_id)
             facts, all_source_urls = await self.analyzer.analyze(parsed)
             job_manager.add_progress(
-                job_id, 
-                f"✅ Found {len(facts)} facts from {len(all_source_urls)} sources"
+                job_id,
+                f"✅ Found {len(facts)} claims citing {len(all_source_urls)} sources"
             )
 
-            # Step 3: Scrape sources
+            # Step 3: Scrape cited sources
             unique_urls = list(set(all_source_urls))
             job_manager.add_progress(
-                job_id, 
-                f"🌐 Scraping {len(unique_urls)} sources..."
+                job_id,
+                f"🌐 Scraping {len(unique_urls)} sources cited by LLM..."
             )
-            self._check_cancellation(job_id) 
+            self._check_cancellation(job_id)
 
             all_scraped_content = await self.scraper.scrape_urls_for_facts(unique_urls)
             successful_scrapes = len([v for v in all_scraped_content.values() if v])
             job_manager.add_progress(
                 job_id,
-                f"✅ Scraped {successful_scrapes}/{len(unique_urls)} sources"
+                f"✅ Scraped {successful_scrapes}/{len(unique_urls)} cited sources"
             )
 
-            # Step 4: Verify each fact
+            # Step 4: Verify each claim's interpretation
+            job_manager.add_progress(
+                job_id,
+                f"🔬 Verifying how accurately LLM interpreted sources..."
+            )
+
             results = []
             for i, fact in enumerate(facts, 1):
                 job_manager.add_progress(
                     job_id,
-                    f"⚖️ Verifying fact {i}/{len(facts)}: \"{fact.statement[:60]}...\"",
+                    f"🔬 Checking claim {i}/{len(facts)}: \"{fact.statement[:60]}...\"",
                     {'fact_id': fact.id, 'progress': f"{i}/{len(facts)}"}
                 )
-                self._check_cancellation(job_id) 
+                self._check_cancellation(job_id)
 
-                excerpts = await self._extract_relevant_excerpts_semantic(fact, all_scraped_content)
-                check_result = await self.checker.check_fact(fact, excerpts)
-                results.append(check_result)
+                # Extract relevant excerpts from sources
+                excerpts = await self._extract_excerpts(fact, all_scraped_content)
+
+                # ✅ VERIFY INTERPRETATION (this is the core step)
+                verification = await self.verifier.verify_interpretation(
+                    fact,
+                    excerpts,
+                    all_scraped_content
+                )
+
+                results.append(verification)
 
                 # Show result
-                emoji = "✅" if check_result.match_score >= 0.9 else "⚠️" if check_result.match_score >= 0.7 else "❌"
+                emoji = "✅" if verification.verification_score >= 0.9 else "⚠️" if verification.verification_score >= 0.7 else "❌"
                 job_manager.add_progress(
                     job_id,
-                    f"{emoji} {fact.id}: Score {check_result.match_score:.2f}"
+                    f"{emoji} {fact.id}: {verification.verification_score:.2f} - {verification.assessment[:50]}..."
                 )
-                self._check_cancellation(job_id) 
 
-            results.sort(key=lambda x: x.match_score)
+                # Show interpretation issues if any
+                if verification.interpretation_issues:
+                    issues_text = ", ".join(verification.interpretation_issues[:2])
+                    job_manager.add_progress(
+                        job_id,
+                        f"  ⚠️ Issues: {issues_text}"
+                    )
 
-            # Save and finish
-            job_manager.add_progress(job_id, "💾 Saving results...")
-            self._check_cancellation(job_id) 
+                self._check_cancellation(job_id)
 
-            # ✅ CHANGED: Capture upload result (this is a second save, consider removing if duplicate)
+            # Sort by verification score
+            results.sort(key=lambda x: x.verification_score)
+
+            # Save session
+            job_manager.add_progress(job_id, "💾 Saving verification report...")
+            self._check_cancellation(job_id)
+
             upload_result = self.file_manager.save_session_content(
-                session_id, 
-                all_scraped_content, 
-                facts, 
-                upload_to_r2=True  # ✅ CHANGED: upload_to_drive → upload_to_r2
+                session_id,
+                all_scraped_content,
+                facts,
+                upload_to_r2=True
             )
 
-            # ✅ ADD THIS: Show upload status to user
             if upload_result and upload_result.get('success'):
                 job_manager.add_progress(job_id, "☁️ Report uploaded to R2")
             else:
                 error_msg = upload_result.get('error', 'Unknown error') if upload_result else 'Upload returned no result'
                 job_manager.add_progress(job_id, f"⚠️ R2 upload failed: {error_msg}")
 
+            # Generate summary
             summary = self._generate_summary(results)
             duration = time.time() - start_time
 
+            job_manager.add_progress(
+                job_id,
+                f"✅ Verification complete! Avg interpretation score: {summary['avg_interpretation_score']:.2f}"
+            )
+
+            fact_logger.logger.info(
+                f"🎉 INTERPRETATION VERIFICATION COMPLETE: {session_id}",
+                extra={
+                    "session_id": session_id,
+                    "duration": duration,
+                    "total_claims": len(results),
+                    "avg_score": summary['avg_interpretation_score']
+                }
+            )
+
             return {
                 "session_id": session_id,
-                "facts": [r.dict() for r in results],
+                "claims": [r.dict() for r in results],
                 "summary": summary,
                 "duration": duration,
                 "total_sources_scraped": len(unique_urls),
                 "successful_scrapes": successful_scrapes,
-                "methodology": "global_source_checking_semantic",
+                "process": "llm_interpretation_verification",
                 "langsmith_url": f"https://smith.langchain.com/projects/p/{langsmith_config.project_name}",
-                # ✅ NEW: Add R2 upload status
                 "r2_upload": {
                     "success": upload_result.get('success', False) if upload_result else False,
                     "url": upload_result.get('url') if upload_result else None,
@@ -265,44 +213,26 @@ class FactCheckOrchestrator:
             }
 
         except Exception as e:
-        # Handle cancellation specially
             if "cancelled" in str(e).lower():
-                job_manager.add_progress(job_id, "🛑 Job cancelled successfully")
+                job_manager.add_progress(job_id, "🛑 Verification cancelled")
                 job_manager.fail_job(job_id, "Cancelled by user")
             else:
                 fact_logger.log_component_error(f"Job {job_id}", e)
                 job_manager.fail_job(job_id, str(e))
             raise
 
-    async def _extract_relevant_excerpts_semantic(
-        self, 
-        fact, 
-        scraped_content: dict
-    ) -> dict:
-        """
-        ✅ NEW: Extract relevant excerpts using semantic understanding via Highlighter
-
-        This replaces the old keyword-based extraction with proper semantic matching.
-
-        Args:
-            fact: The Fact object to find excerpts for
-            scraped_content: Dict of {url: content}
-
-        Returns:
-            Dict of {url: [excerpts]} with semantically matched excerpts
-        """
+    async def _extract_excerpts(self, fact, scraped_content: dict) -> dict:
+        """Extract relevant excerpts using Highlighter"""
         fact_logger.logger.info(
-            f"🔦 Using semantic extraction for {fact.id}",
+            f"🔦 Extracting excerpts for {fact.id}",
             extra={"fact_id": fact.id, "num_sources": len(scraped_content)}
         )
 
-        # Use the highlighter's semantic extraction for each source
         excerpts_by_url = await self.highlighter.highlight(fact, scraped_content)
 
-        # Log extraction results
         total_excerpts = sum(len(excerpts) for excerpts in excerpts_by_url.values())
         fact_logger.logger.info(
-            f"✂️ Semantic extraction complete: {total_excerpts} excerpts from {len(excerpts_by_url)} sources",
+            f"✂️ Extracted {total_excerpts} excerpts from {len(excerpts_by_url)} sources",
             extra={
                 "fact_id": fact.id,
                 "total_excerpts": total_excerpts,
@@ -318,26 +248,45 @@ class FactCheckOrchestrator:
         return self.parser.parse_input(html_content)
 
     def _generate_summary(self, results: list) -> dict:
-        """Generate summary statistics"""
+        """
+        Generate summary for interpretation verification results
+
+        Args:
+            results: List of LLMVerificationResult objects
+        """
         if not results:
             return {
-                "total_facts": 0,
-                "accurate": 0,
-                "good_match": 0,
-                "questionable": 0,
-                "avg_score": 0.0
+                "total_claims": 0,
+                "accurate_interpretation": 0,
+                "good_interpretation": 0,
+                "poor_interpretation": 0,
+                "avg_interpretation_score": 0.0,
+                "common_issues": []
             }
 
         total = len(results)
-        accurate = len([r for r in results if r.match_score >= 0.9])
-        good = len([r for r in results if 0.7 <= r.match_score < 0.9])
-        questionable = len([r for r in results if r.match_score < 0.7])
-        avg_score = sum(r.match_score for r in results) / total
+
+        # Interpretation quality breakdown
+        accurate = len([r for r in results if r.verification_score >= 0.9])
+        good = len([r for r in results if 0.7 <= r.verification_score < 0.9])
+        poor = len([r for r in results if r.verification_score < 0.7])
+        avg_score = sum(r.verification_score for r in results) / total
+
+        # Collect common interpretation issues
+        all_issues = []
+        for r in results:
+            all_issues.extend(r.interpretation_issues)
+
+        # Get most common issues (simple frequency count)
+        from collections import Counter
+        issue_counts = Counter(all_issues)
+        common_issues = [issue for issue, count in issue_counts.most_common(5)]
 
         return {
-            "total_facts": total,
-            "accurate": accurate,
-            "good_match": good,
-            "questionable": questionable,
-            "avg_score": round(avg_score, 3)
+            "total_claims": total,
+            "accurate_interpretation": accurate,  # 0.9+
+            "good_interpretation": good,          # 0.7-0.89
+            "poor_interpretation": poor,          # <0.7
+            "avg_interpretation_score": round(avg_score, 3),
+            "common_issues": common_issues
         }

@@ -1,4 +1,4 @@
-`# prompts/bias_checker_prompts.py
+# prompts/bias_checker_prompts.py
 """
 Prompts for the Bias Checker component
 Detects political, ideological, and other biases in text

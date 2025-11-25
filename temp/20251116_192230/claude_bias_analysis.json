@@ -1,0 +1,71 @@
+{
+  "model_name": "claude-sonnet-4",
+  "overall_bias_score": 6.5,
+  "primary_bias_direction": "anti-government/opposition-leaning",
+  "biases_detected": [
+    {
+      "type": "Political Bias",
+      "direction": "anti-government/opposition-leaning",
+      "severity": 6,
+      "evidence": "Text specifically names and criticizes 'the ruling Morena party's handling of public safety' without providing government response or context for their policies",
+      "techniques": [
+        "selective targeting",
+        "one-sided attribution",
+        "loaded framing"
+      ]
+    },
+    {
+      "type": "Framing Bias",
+      "direction": "pro-protest",
+      "severity": 7,
+      "evidence": "Protesters are described as 'inspired by global Gen Z movements' with 'powerful personal appeals for justice' while police actions are described more neutrally as responses",
+      "techniques": [
+        "sympathetic framing",
+        "emotional language",
+        "heroic narrative"
+      ]
+    },
+    {
+      "type": "Source Selection Bias",
+      "direction": "protest-sympathetic",
+      "severity": 5,
+      "evidence": "No quotes or perspectives from government officials, police, or Morena party representatives are included",
+      "techniques": [
+        "omission of opposing viewpoints",
+        "single-perspective reporting"
+      ]
+    },
+    {
+      "type": "Structural Bias",
+      "direction": "protest-favorable",
+      "severity": 4,
+      "evidence": "Violence is mentioned but framed as reactive ('clashes broke out when' and 'responded with tear gas') rather than initiated by protesters",
+      "techniques": [
+        "passive voice for controversial actions",
+        "causal sequencing"
+      ]
+    }
+  ],
+  "balanced_aspects": [
+    "Reports factual details about violence from both sides (stone throwing by protesters, tear gas by police)",
+    "Mentions specific casualties (hundreds injured, dozens arrested)",
+    "Provides concrete details about the triggering event (Mayor Manzo's assassination)",
+    "Uses relatively neutral language for describing the physical confrontations"
+  ],
+  "missing_perspectives": [
+    "Government or Morena party response to the protests and criticisms",
+    "Police or security forces' justification for their actions",
+    "Context about existing government anti-crime or anti-corruption efforts",
+    "Perspectives from citizens who may support the current government",
+    "Analysis of the broader political context beyond the protests"
+  ],
+  "recommendations": [
+    "Include statements or responses from government officials and Morena party representatives",
+    "Provide context about existing government policies addressing crime and corruption",
+    "Interview diverse citizens beyond protesters to gauge broader public opinion",
+    "Add expert analysis on the effectiveness of current anti-crime measures",
+    "Include information about any government reforms or initiatives already underway",
+    "Balance emotional language about protesters with similar treatment of other actors"
+  ],
+  "reasoning": "The text demonstrates moderate bias primarily through its framing and omission of perspectives. While it reports factual events, it consistently presents protesters in sympathetic terms while providing no voice to government officials or context for their policies. The bias is not extreme as it does report violence from protesters and doesn't use highly inflammatory language, but the one-sided perspective and selective framing create a clear anti-government lean that falls short of balanced journalism standards."
+}

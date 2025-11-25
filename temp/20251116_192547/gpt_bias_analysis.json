@@ -1,0 +1,40 @@
+{
+  "model_name": "gpt-4o",
+  "overall_bias_score": 5.0,
+  "primary_bias_direction": "left-leaning",
+  "biases_detected": [
+    {
+      "type": "Political Bias",
+      "direction": "left-leaning",
+      "severity": 6,
+      "evidence": "The text highlights the influence of Gen Z movements and criticizes the ruling Morena party\u2019s handling of public safety.",
+      "techniques": [
+        "Selective emphasis",
+        "One-sided presentation"
+      ]
+    },
+    {
+      "type": "Framing Bias",
+      "direction": "left-leaning",
+      "severity": 5,
+      "evidence": "The text uses emotionally charged language such as 'mass outrage' and 'powerful personal appeals for justice'.",
+      "techniques": [
+        "Emotional appeals",
+        "Loaded language"
+      ]
+    }
+  ],
+  "balanced_aspects": [
+    "The text provides a factual account of the events, including the actions of both protesters and police.",
+    "It mentions the specific incident that sparked the protests, providing context."
+  ],
+  "missing_perspectives": [
+    "The perspective of the ruling Morena party or government officials.",
+    "Views from law enforcement or security forces involved in the clashes."
+  ],
+  "recommendations": [
+    "Include statements or responses from Morena party officials to provide balance.",
+    "Incorporate perspectives from law enforcement to understand their actions during the protests."
+  ],
+  "reasoning": "The text leans towards a left-leaning perspective by emphasizing the role of Gen Z movements and criticizing the ruling party without presenting their viewpoint. Emotional language is used to frame the protests positively, while the government's perspective is notably absent. Including more diverse viewpoints would enhance the balance."
+}

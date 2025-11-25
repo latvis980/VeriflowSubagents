@@ -1,0 +1,153 @@
+{
+  "session_id": "20251116_192230",
+  "timestamp": "2025-11-16 19:23:00",
+  "publication": null,
+  "text_analyzed": "Thousands of protesters, inspired by global Gen Z movements, clashed with police outside Mexico City\u2019s National Palace on November 15, demanding action against rampant crime, government corruption, and the recent assassination of Uruapan Mayor Carlos Manzo. Clashes broke out when masked demonstrators tore down metal barriers erected by riot police, some protesters throwing stones as security forces responded with tear gas. Many young demonstrators waved Mexican flags and decried the ruling Moren...",
+  "gpt_analysis": {
+    "model_name": "gpt-4o",
+    "overall_bias_score": 5.0,
+    "primary_bias_direction": "left-leaning",
+    "biases_detected": [
+      {
+        "type": "Political Bias",
+        "direction": "left-leaning",
+        "severity": 6,
+        "evidence": "The text highlights the protesters' demands against the ruling Morena party and emphasizes the Gen Z movements, which are often associated with progressive causes.",
+        "techniques": [
+          "Selective emphasis",
+          "One-sided presentation"
+        ]
+      },
+      {
+        "type": "Framing Bias",
+        "direction": "left-leaning",
+        "severity": 5,
+        "evidence": "The text uses emotionally charged language such as 'rampant crime', 'government corruption', and 'mass outrage', which can evoke a negative perception of the current government.",
+        "techniques": [
+          "Loaded language",
+          "Emotional appeals"
+        ]
+      }
+    ],
+    "balanced_aspects": [
+      "The text provides specific details about the events, such as the date and location of the protests.",
+      "It mentions both the actions of the protesters and the response by the police, offering a basic overview of the situation."
+    ],
+    "missing_perspectives": [
+      "The perspective of the ruling Morena party or government officials.",
+      "A detailed account of the police's perspective or justification for their actions."
+    ],
+    "recommendations": [
+      "Include statements or responses from government officials to provide a more balanced view.",
+      "Offer more context on the political situation in Mexico to help readers understand the broader implications."
+    ],
+    "reasoning": "The text leans towards a left-leaning perspective by focusing on the protesters' demands and criticisms of the government without providing counterpoints or responses from the ruling party. The use of emotionally charged language contributes to a framing bias, potentially influencing readers' perceptions. However, the text does provide a factual account of the events, which helps maintain some balance."
+  },
+  "claude_analysis": {
+    "model_name": "claude-sonnet-4",
+    "overall_bias_score": 6.5,
+    "primary_bias_direction": "anti-government/opposition-leaning",
+    "biases_detected": [
+      {
+        "type": "Political Bias",
+        "direction": "anti-government/opposition-leaning",
+        "severity": 6,
+        "evidence": "Text specifically names and criticizes 'the ruling Morena party's handling of public safety' without providing government response or context for their policies",
+        "techniques": [
+          "selective targeting",
+          "one-sided attribution",
+          "loaded framing"
+        ]
+      },
+      {
+        "type": "Framing Bias",
+        "direction": "pro-protest",
+        "severity": 7,
+        "evidence": "Protesters are described as 'inspired by global Gen Z movements' with 'powerful personal appeals for justice' while police actions are described more neutrally as responses",
+        "techniques": [
+          "sympathetic framing",
+          "emotional language",
+          "heroic narrative"
+        ]
+      },
+      {
+        "type": "Source Selection Bias",
+        "direction": "protest-sympathetic",
+        "severity": 5,
+        "evidence": "No quotes or perspectives from government officials, police, or Morena party representatives are included",
+        "techniques": [
+          "omission of opposing viewpoints",
+          "single-perspective reporting"
+        ]
+      },
+      {
+        "type": "Structural Bias",
+        "direction": "protest-favorable",
+        "severity": 4,
+        "evidence": "Violence is mentioned but framed as reactive ('clashes broke out when' and 'responded with tear gas') rather than initiated by protesters",
+        "techniques": [
+          "passive voice for controversial actions",
+          "causal sequencing"
+        ]
+      }
+    ],
+    "balanced_aspects": [
+      "Reports factual details about violence from both sides (stone throwing by protesters, tear gas by police)",
+      "Mentions specific casualties (hundreds injured, dozens arrested)",
+      "Provides concrete details about the triggering event (Mayor Manzo's assassination)",
+      "Uses relatively neutral language for describing the physical confrontations"
+    ],
+    "missing_perspectives": [
+      "Government or Morena party response to the protests and criticisms",
+      "Police or security forces' justification for their actions",
+      "Context about existing government anti-crime or anti-corruption efforts",
+      "Perspectives from citizens who may support the current government",
+      "Analysis of the broader political context beyond the protests"
+    ],
+    "recommendations": [
+      "Include statements or responses from government officials and Morena party representatives",
+      "Provide context about existing government policies addressing crime and corruption",
+      "Interview diverse citizens beyond protesters to gauge broader public opinion",
+      "Add expert analysis on the effectiveness of current anti-crime measures",
+      "Include information about any government reforms or initiatives already underway",
+      "Balance emotional language about protesters with similar treatment of other actors"
+    ],
+    "reasoning": "The text demonstrates moderate bias primarily through its framing and omission of perspectives. While it reports factual events, it consistently presents protesters in sympathetic terms while providing no voice to government officials or context for their policies. The bias is not extreme as it does report violence from protesters and doesn't use highly inflammatory language, but the one-sided perspective and selective framing create a clear anti-government lean that falls short of balanced journalism standards."
+  },
+  "combined_report": {
+    "consensus_bias_score": 5.75,
+    "consensus_direction": "left-leaning/anti-government",
+    "areas_of_agreement": [
+      "Both analyses identify a left-leaning or anti-government bias.",
+      "Both note the lack of government or Morena party perspectives.",
+      "Both highlight the use of emotionally charged language.",
+      "Both agree on the presence of framing bias favoring protesters."
+    ],
+    "areas_of_disagreement": [
+      "GPT-4O describes the bias as 'left-leaning', while Claude Sonnet describes it as 'anti-government/opposition-leaning'.",
+      "GPT-4O does not mention source selection bias, while Claude Sonnet identifies it as a distinct bias.",
+      "Claude Sonnet highlights structural bias, which GPT-4O does not mention."
+    ],
+    "gpt_unique_findings": [
+      "The text provides specific details about the events, such as the date and location of the protests.",
+      "It mentions both the actions of the protesters and the response by the police, offering a basic overview of the situation."
+    ],
+    "claude_unique_findings": [
+      "Identifies source selection bias due to the omission of government perspectives.",
+      "Notes structural bias in the framing of violence as reactive rather than initiated by protesters."
+    ],
+    "publication_bias_context": null,
+    "final_assessment": "The text exhibits a moderate left-leaning or anti-government bias. Both analyses agree on the presence of political and framing biases, with a focus on protesters' perspectives and criticisms of the government. The lack of government viewpoints and the use of emotionally charged language contribute to this bias. While factual details are provided, the overall narrative is skewed towards a sympathetic portrayal of the protesters. The bias is not extreme but falls short of balanced reporting standards.",
+    "confidence": 0.9,
+    "recommendations": [
+      "Include statements or responses from government officials and Morena party representatives.",
+      "Provide context about existing government policies addressing crime and corruption.",
+      "Interview diverse citizens beyond protesters to gauge broader public opinion.",
+      "Add expert analysis on the effectiveness of current anti-crime measures.",
+      "Include information about any government reforms or initiatives already underway.",
+      "Balance emotional language about protesters with similar treatment of other actors."
+    ]
+  },
+  "publication_profile": null,
+  "processing_time": 30.643875122070312
+}

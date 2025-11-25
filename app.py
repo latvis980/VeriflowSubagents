@@ -7,9 +7,10 @@ from typing import Optional
 from dotenv import load_dotenv
 
 # Import your components
-from orchestrator.llm_output_orchestrator import FactCheckOrchestrator
+from orchestrator.llm_output_orchestrator import LLMInterpretationOrchestrator
 from orchestrator.web_search_orchestrator import WebSearchOrchestrator
 from orchestrator.bias_check_orchestrator import BiasCheckOrchestrator
+from orchestrator.lie_detector_orchestrator import LieDetectorOrchestrator
 from utils.logger import fact_logger
 from utils.langsmith_config import langsmith_config
 from utils.job_manager import job_manager
@@ -43,10 +44,16 @@ class Config:
 
 config = Config()
 
-# Initialize orchestrators (singleton)
-llm_orchestrator = FactCheckOrchestrator(config)
+# 1. LLM Interpretation Orchestrator (for LLM output with sources)
+llm_interpretation_orchestrator: Optional[LLMInterpretationOrchestrator] = None
+try:
+    llm_interpretation_orchestrator = LLMInterpretationOrchestrator(config)
+    fact_logger.logger.info("✅ LLM Interpretation Orchestrator initialized successfully")
+except Exception as e:
+    fact_logger.logger.error(f"❌ Failed to initialize LLM Interpretation Orchestrator: {e}")
+    llm_interpretation_orchestrator = None
 
-# Better error handling for web search orchestrator
+# 2. Web Search Orchestrator (for fact-checking any text via web search)
 web_search_orchestrator: Optional[WebSearchOrchestrator] = None
 if config.tavily_api_key:
     try:
@@ -56,8 +63,10 @@ if config.tavily_api_key:
         fact_logger.logger.error(f"❌ Failed to initialize Web Search Orchestrator: {e}")
         fact_logger.logger.warning("⚠️ Web search pipeline will not be available")
         web_search_orchestrator = None
+else:
+    fact_logger.logger.warning("⚠️ TAVILY_API_KEY not set - web search will not work")
 
-# Initialize Bias Check Orchestrator (INDEPENDENT of Tavily)
+# 3. Bias Check Orchestrator (analyzes text for political/ideological bias)
 bias_orchestrator: Optional[BiasCheckOrchestrator] = None
 try:
     bias_orchestrator = BiasCheckOrchestrator(config)
@@ -66,6 +75,21 @@ except Exception as e:
     fact_logger.logger.error(f"❌ Failed to initialize Bias Check Orchestrator: {e}")
     bias_orchestrator = None
 
+# 4. Lie Detector Orchestrator (detects linguistic markers of deception)
+lie_detector_orchestrator: Optional[LieDetectorOrchestrator] = None
+try:
+    lie_detector_orchestrator = LieDetectorOrchestrator(config)
+    fact_logger.logger.info("✅ Lie Detector Orchestrator initialized successfully")
+except Exception as e:
+    fact_logger.logger.error(f"❌ Failed to initialize Lie Detector Orchestrator: {e}")
+    lie_detector_orchestrator = None
+
+# Log summary
+fact_logger.logger.info("📊 Orchestrator initialization complete:")
+fact_logger.logger.info(f"  - LLM Interpretation: {'✅' if llm_interpretation_orchestrator else '❌'}")
+fact_logger.logger.info(f"  - Web Search: {'✅' if web_search_orchestrator else '❌'}")
+fact_logger.logger.info(f"  - Bias Check: {'✅' if bias_orchestrator else '❌'}")
+fact_logger.logger.info(f"  - Lie Detection: {'✅' if lie_detector_orchestrator else '❌'}")
 
 def detect_input_format(content: str) -> str:
     """
@@ -229,23 +253,114 @@ def check_bias():
             "message": "An error occurred during bias analysis"
         }), 500
 
+@app.route('/api/check-lie-detection', methods=['POST'])
+def check_lie_detection():
+    """Analyze text for linguistic markers of deception/fake news"""
+    try:
+        # Get content from request
+        request_json = request.get_json()
+        if not request_json:
+            return jsonify({"error": "Invalid request format"}), 400
+
+        text = request_json.get('text') or request_json.get('content')
+        article_source = request_json.get('article_source')  # Optional: publication name
+        article_date = request_json.get('article_date')      # Optional: publication date
+
+        if not text:
+            return jsonify({"error": "No text provided"}), 400
+
+        if not lie_detector_orchestrator:
+            return jsonify({
+                "error": "Lie detection not available",
+                "message": "Lie Detector Orchestrator not initialized"
+            }), 503
+
+        fact_logger.logger.info(
+            "🕵️ Received lie detection request",
+            extra={
+                "text_length": len(text),
+                "has_source": bool(article_source),
+                "has_date": bool(article_date)
+            }
+        )
+
+        # Create job
+        job_id = job_manager.create_job(text)
+        fact_logger.logger.info(f"✅ Created lie detection job: {job_id}")
+
+        # Start background processing
+        threading.Thread(
+            target=run_lie_detection_task,
+            args=(job_id, text, article_source, article_date),
+            daemon=True
+        ).start()
+
+        return jsonify({
+            "job_id": job_id,
+            "status": "processing",
+            "message": "Lie detection analysis started"
+        })
+
+    except Exception as e:
+        fact_logger.log_component_error("Flask API - Lie Detection", e)
+        return jsonify({
+            "error": str(e),
+            "message": "An error occurred during lie detection"
+        }), 500
+
+
+def run_lie_detection_task(job_id: str, text: str, article_source: Optional[str], article_date: Optional[str]):
+    """Background task runner for lie detection analysis."""
+    try:
+        if lie_detector_orchestrator is None:  # ← ADD THIS CHECK
+            raise ValueError("Lie detector orchestrator not initialized")
+            
+        fact_logger.logger.info(f"🕵️ Job {job_id}: Starting lie detection analysis")
+
+        result = run_async_in_thread(
+            lie_detector_orchestrator.process(
+                text, 
+                job_id, 
+                article_source, 
+                article_date
+            )
+        )
+
+        job_manager.complete_job(job_id, result)
+        fact_logger.logger.info(f"✅ Lie detection job {job_id} completed successfully")
+
+    except Exception as e:
+        fact_logger.log_component_error(f"Lie Detection Job {job_id}", e)
+        job_manager.fail_job(job_id, str(e))
+
+    finally:
+        cleanup_thread_loop()
+
 
 def run_async_task(job_id: str, content: str, input_format: str):
     """
     Background task runner for fact checking.
-    This matches your other working app's pattern.
+    Routes to appropriate orchestrator based on input format:
+    - 'html' → LLM Interpretation Orchestrator (checks if LLM interpreted sources correctly)
+    - 'text' → Web Search Orchestrator (fact-checks via web search)
     """
     try:
         if input_format == 'html':
-            fact_logger.logger.info(f"🔗 Job {job_id}: LLM Output pipeline")
-            result = run_async_in_thread(
-                llm_orchestrator.process_with_progress(content, job_id)
-            )
-        else:
-            if web_search_orchestrator is None:
-                raise ValueError("Web search orchestrator not initialized")
+            # LLM output with sources → Interpretation verification
+            if llm_interpretation_orchestrator is None:
+                raise ValueError("LLM Interpretation orchestrator not initialized")
 
-            fact_logger.logger.info(f"📝 Job {job_id}: Web Search pipeline")
+            fact_logger.logger.info(f"🔍 Job {job_id}: LLM Interpretation Verification pipeline")
+            result = run_async_in_thread(
+                llm_interpretation_orchestrator.process_with_progress(content, job_id)
+            )
+
+        else:  # input_format == 'text'
+            # Plain text → Fact-checking via web search
+            if web_search_orchestrator is None:
+                raise ValueError("Web search orchestrator not initialized - TAVILY_API_KEY may be missing")
+
+            fact_logger.logger.info(f"🔎 Job {job_id}: Web Search Fact-Checking pipeline")
             result = run_async_in_thread(
                 web_search_orchestrator.process_with_progress(content, job_id)
             )
@@ -261,14 +376,15 @@ def run_async_task(job_id: str, content: str, input_format: str):
     finally:
         cleanup_thread_loop()
 
-
 def run_bias_task(job_id: str, text: str, publication_name: Optional[str]):
     """Background task runner for bias analysis."""
     try:
+        if bias_orchestrator is None:  # ← ADD THIS CHECK
+            raise ValueError("Bias orchestrator not initialized")
         fact_logger.logger.info(f"📊 Job {job_id}: Starting bias analysis")
 
         result = run_async_in_thread(
-            bias_orchestrator.process_with_progress(text, job_id, publication_name)
+            bias_orchestrator.process_with_progress(text, job_id, publication_name)  # ← Changed
         )
 
         job_manager.complete_job(job_id, result)
@@ -280,7 +396,6 @@ def run_bias_task(job_id: str, text: str, publication_name: Optional[str]):
 
     finally:
         cleanup_thread_loop()
-
 
 @app.route('/api/job/<job_id>', methods=['GET'])
 def get_job_status(job_id: str):
@@ -333,7 +448,7 @@ def stream_job_progress(job_id: str):
                 try:
                     progress = queue.get(timeout=1)
                     yield f"data: {json.dumps(progress)}\n\n"
-                except:
+                except Exception:
                     # Send heartbeat
                     yield f"data: {json.dumps({'heartbeat': True})}\n\n"
 
@@ -374,7 +489,7 @@ def health_check():
     """Health check endpoint"""
     return jsonify({
         "status": "healthy",
-        "llm_orchestrator": llm_orchestrator is not None,
+        "llm_orchestrator": llm_interpretation_orchestrator is not None,
         "web_search_orchestrator": web_search_orchestrator is not None,
         "bias_orchestrator": bias_orchestrator is not None
     })

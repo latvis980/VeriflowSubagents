@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 from datetime import datetime
 import asyncio
+from typing import Optional
 
 # Import the separate publication name extractor
 from utils.publication_name_extractor import get_publication_name_extractor
@@ -119,9 +120,9 @@ class FileManager:
         self, 
         session_id: str, 
         all_scraped_content: dict, 
-        facts: list = None,
-        upload_to_r2: bool = True,  # ✅ CHANGED: upload_to_drive → upload_to_r2
-        queries_by_fact: dict = None
+        facts: Optional[list] = None,
+        upload_to_r2: bool = True,
+        queries_by_fact: Optional[dict] = None
     ):
         """
         Save all scraped content with metadata in one comprehensive file
@@ -139,7 +140,7 @@ class FileManager:
         filepath = session_path / "session_report.txt"
 
         # Extract publication names using AI
-        publication_names = asyncio.run(self._extract_all_publication_names(all_scraped_content.keys()))
+        publication_names = asyncio.run(self._extract_all_publication_names(list(all_scraped_content.keys())))
 
         with open(filepath, 'w', encoding='utf-8') as f:
             # Header with session metadata
@@ -167,8 +168,8 @@ class FileManager:
                 f.write("FACTS BEING VERIFIED:\n")
                 f.write("-" * 50 + "\n")
                 for i, fact in enumerate(facts, 1):
-                    f.write(f"\n{i}. [{fact.id}] {fact.claim}\n")
-                    f.write(f"   Context: {fact.context}\n")
+                    f.write(f"\n{i}. [{fact.id}] {fact.statement}\n")
+                    f.write(f"   Original Text: {fact.original_text}\n")
                     
                     # Add search queries if available
                     if queries_by_fact and fact.id in queries_by_fact:
@@ -176,7 +177,7 @@ class FileManager:
                         f.write(f"\n   PRIMARY QUERY: {queries.primary_query}\n")
                         
                         if hasattr(queries, 'alternative_queries') and queries.alternative_queries:
-                            f.write(f"   ALTERNATIVE QUERIES:\n")
+                            f.write("   ALTERNATIVE QUERIES:\n")
                             for alt_query in queries.alternative_queries:
                                 f.write(f"     - {alt_query}\n")
                         f.write("\n")

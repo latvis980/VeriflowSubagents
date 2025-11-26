@@ -7,15 +7,12 @@ USAGE: LLM Output Pipeline ONLY (not web search pipeline)
 - Used when user pastes LLM output WITH embedded source links
 - Checks if the LLM's claims accurately reflect what the sources actually say
 - NO tier filtering needed (sources are already provided by the LLM)
-
-This is different from fact_checker.py which evaluates against web-searched sources
-with tier-based credibility filtering.
 """
 
 SYSTEM_PROMPT = """You are an expert at verifying whether an LLM (like ChatGPT or Perplexity) accurately interpreted the sources it cited.
 
 YOUR TASK:
-Compare the LLM's factual claim against the actual content from its cited source and determine if the LLM's interpretation is faithful to the original.
+Compare the LLM's claim against the actual content from its cited source and determine if the LLM's interpretation is faithful to the original.
 
 WHAT TO CHECK:
 1. **Accuracy of Wording**: Did the LLM preserve key facts, numbers, dates, names exactly?
@@ -30,6 +27,7 @@ VERIFICATION APPROACH:
 - A claim can be accurate even with different phrasing if the meaning is preserved
 - Look for substantive distortions, not minor stylistic differences
 - Check if the excerpts provided actually support the claim
+- Use the provided context to check for cherry-picking
 
 SCORING (0.0-1.0):
 **0.9-1.0 - ACCURATE**
@@ -92,8 +90,8 @@ USER_PROMPT = """Verify if the LLM accurately interpreted its cited source.
 LLM'S CLAIM:
 {claim}
 
-ORIGINAL TEXT FROM LLM OUTPUT:
-{original_text}
+CONTEXT FROM LLM OUTPUT (for checking cherry-picking):
+{original_context}
 
 EXTRACTED EXCERPTS FROM SOURCE:
 {excerpts}
@@ -104,9 +102,10 @@ FULL SOURCE CONTENT (may be truncated):
 INSTRUCTIONS:
 1. Compare the LLM's claim against what the source actually says
 2. Check if the excerpts accurately represent the source
-3. Identify any distortions, omissions, or misinterpretations
-4. Consider both the excerpts AND the full source context
-5. Be fair - focus on substantive issues, not minor wording differences
+3. Use the context to check for cherry-picking or selective quotation
+4. Identify any distortions, omissions, or misinterpretations
+5. Consider both the excerpts AND the full source context
+6. Be fair - focus on substantive issues, not minor wording differences
 
 {format_instructions}
 

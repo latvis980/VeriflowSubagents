@@ -18,6 +18,23 @@ WHAT TO EXTRACT:
 - Claims that have a specific source citation nearby
 - The context surrounding each claim (for checking cherry-picking)
 
+MULTIPLE CITATIONS:
+When a claim has multiple source citations like [4][6][9], you MUST extract ALL of them.
+- Identify all citation numbers in brackets near the claim
+- Map the claim to ALL corresponding source URLs
+- Return cited_sources as a LIST of URLs, not a single URL
+
+EXAMPLE:
+Input: "Takoyaki is topped with sauce, mayo, and bonito [4][6][9]"
+Source Links: [1]: url1, [4]: url4, [6]: url6, [9]: url9
+
+Output:
+{
+  "claim_text": "Takoyaki is topped with sauce, mayo, and bonito",
+  "cited_sources": ["url4", "url6", "url9"],  # ALL three sources
+  ...
+}
+
 IMPORTANT RULES:
 1. **PRESERVE ORIGINAL WORDING**: Don't paraphrase or atomize - keep the LLM's exact phrasing
 2. **MAP TO CITED SOURCE**: Each claim should be linked to the URL mentioned near it

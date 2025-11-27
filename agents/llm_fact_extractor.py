@@ -25,10 +25,10 @@ from utils.langsmith_config import langsmith_config
 
 
 class LLMClaim(BaseModel):
-    """A claim segment from LLM output with its cited source"""
+    """A claim segment from LLM output with its cited sources"""
     id: str
     claim_text: str = Field(description="Original text from LLM output (preserved wording)")
-    cited_source: str = Field(description="Source URL the LLM cited for this claim")
+    cited_sources: List[str] = Field(description="List of source URLs the LLM cited for this claim")  # Changed from cited_source
     context: str = Field(description="Surrounding context for checking cherry-picking")
     confidence: float = Field(ge=0.0, le=1.0, description="Confidence this is a factual claim")
 
@@ -193,24 +193,20 @@ class LLMFactExtractor:
         return unique_claims, all_sources
 
     def _process_response(self, response: dict, parsed_content: dict) -> tuple[List[LLMClaim], List[str]]:
-        """Convert response to LLMClaim objects"""
-
-        if 'error' in response:
-            error_msg = response.get('error', 'Unknown error')
-            fact_logger.logger.error(f"❌ LLM returned error: {error_msg}")
-            raise ValueError(f"LLM error: {error_msg}")
-
-        if 'claims' not in response:
-            fact_logger.logger.error(f"❌ Missing 'claims' in response: {response}")
-            raise ValueError(f"Invalid response structure: missing 'claims' key")
-
         claims = []
         for i, claim_data in enumerate(response.get('claims', [])):
             try:
+                # Handle both old format (cited_source) and new format (cited_sources)
+                cited_sources = claim_data.get('cited_sources')
+                if not cited_sources:
+                    # Fallback for old format
+                    single_source = claim_data.get('cited_source')
+                    cited_sources = [single_source] if single_source else []
+
                 claim = LLMClaim(
                     id=f"claim{i+1}",
                     claim_text=claim_data['claim_text'],
-                    cited_source=claim_data['cited_source'],
+                    cited_sources=cited_sources,  # Now a list
                     context=claim_data.get('context', ''),
                     confidence=claim_data.get('confidence', 1.0)
                 )
@@ -221,7 +217,8 @@ class LLMFactExtractor:
                     extra={
                         "claim_id": claim.id,
                         "claim_text": claim.claim_text[:100],
-                        "cited_source": claim.cited_source
+                        "num_cited_sources": len(claim.cited_sources),  # ✅ New: log count
+                        "cited_sources": claim.cited_sources  # ✅ New: log the list
                     }
                 )
             except KeyError as e:

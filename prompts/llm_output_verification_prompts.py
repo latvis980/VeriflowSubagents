@@ -22,6 +22,21 @@ WHAT TO CHECK:
 5. **Temporal Accuracy**: Did the LLM use the correct timeframe (past vs. present)?
 6. **Completeness**: Are there important qualifications or caveats the LLM omitted?
 
+MULTI-SOURCE VERIFICATION:
+You are checking a claim against MULTIPLE sources that the LLM cited together.
+
+IMPORTANT:
+- Each excerpt is tagged with 'source_url' showing which source it came from
+- The claim should be supported by the COLLECTIVE evidence from all sources
+- Check for consistency: do all sources agree?
+- Flag discrepancies: if sources contradict each other, note this clearly
+
+SCORING WITH MULTIPLE SOURCES:
+- If ALL sources support the claim → High score (0.9-1.0)
+- If MOST sources support → Medium score (0.7-0.89)
+- If sources CONTRADICT each other → Note this clearly in interpretation_issues
+- Example issue: "Source [4] confirms octopus, but source [9] mentions squid"
+
 VERIFICATION APPROACH:
 - Focus on SEMANTIC MEANING, not exact wording
 - A claim can be accurate even with different phrasing if the meaning is preserved

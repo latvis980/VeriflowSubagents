@@ -23,7 +23,6 @@ from agents.llm_fact_extractor import LLMClaim  # ✅ Import new type
 
 
 class LLMVerificationResult(BaseModel):
-    """Result of LLM output verification"""
     claim_id: str
     claim_text: str
     verification_score: float = Field(ge=0.0, le=1.0)
@@ -32,8 +31,8 @@ class LLMVerificationResult(BaseModel):
     wording_comparison: Dict
     confidence: float = Field(ge=0.0, le=1.0)
     reasoning: str
-    excerpts: List[Dict] = Field(default_factory=list)  # ✅ Store highlighted excerpts
-    cited_source_url: str = ""  # ✅ Store the source URL that was verified
+    excerpts: List[Dict] = Field(default_factory=list)
+    cited_source_urls: List[str] = Field(default_factory=list)  # Changed to list
 
 
 class LLMOutputVerifier:
@@ -67,17 +66,24 @@ class LLMOutputVerifier:
         run_type="chain",
         tags=["llm-verification", "interpretation-check"]
     )
+    @traceable(
+        name="verify_llm_interpretation",
+        run_type="chain",
+        tags=["llm-verification", "interpretation-check"]
+    )
     async def verify_interpretation(
         self,
-        claim: LLMClaim,  # ✅ Changed from Fact to LLMClaim
+        claim: LLMClaim,
         excerpts_by_url: Dict[str, List[Dict]],
         scraped_content: Dict[str, str]
     ) -> LLMVerificationResult:
         """
-        Verify if LLM accurately interpreted its cited source
+        Verify if LLM accurately interpreted its cited sources
+
+        ✅ NEW: Checks against ALL cited sources (handles [4][6][9] style citations)
 
         Args:
-            claim: The LLMClaim object with the LLM's claim text
+            claim: The LLMClaim object with the LLM's claim text and cited_sources list
             excerpts_by_url: Excerpts extracted by Highlighter {url: [excerpts]}
             scraped_content: Full source content {url: content}
 
@@ -88,49 +94,220 @@ class LLMOutputVerifier:
 
         fact_logger.logger.info(
             f"🔍 Verifying LLM interpretation for {claim.id}",
-            extra={"claim_id": claim.id, "num_sources": len(excerpts_by_url)}
+            extra={
+                "claim_id": claim.id, 
+                "num_cited_sources": len(claim.cited_sources)
+            }
         )
 
-        # ✅ Get the cited source from the claim
-        cited_url = claim.cited_source
+        # ✅ Handle multiple cited sources
+        all_excerpts = []
+        available_sources = []
+        missing_sources = []
 
-        if not cited_url or cited_url not in scraped_content:
-            fact_logger.logger.warning(
-                f"⚠️ Cited source not available for {claim.id}",
-                extra={"claim_id": claim.id, "url": cited_url}
+        # Process each cited source
+        for cited_url in claim.cited_sources:
+            if cited_url in scraped_content:
+                available_sources.append(cited_url)
+                source_excerpts = excerpts_by_url.get(cited_url, [])
+
+                fact_logger.logger.debug(
+                    f"  📄 Source available: {cited_url} ({len(source_excerpts)} excerpts)",
+                    extra={"claim_id": claim.id, "source_url": cited_url}
+                )
+
+                # Tag each excerpt with its source URL for multi-source verification
+                for excerpt in source_excerpts:
+                    excerpt_with_source = excerpt.copy()
+                    excerpt_with_source['source_url'] = cited_url
+                    all_excerpts.append(excerpt_with_source)
+            else:
+                missing_sources.append(cited_url)
+                fact_logger.logger.warning(
+                    f"  ⚠️ Source NOT available: {cited_url}",
+                    extra={"claim_id": claim.id, "source_url": cited_url}
+                )
+
+        # Check if we have any available sources
+        if not available_sources:
+            fact_logger.logger.error(
+                f"❌ None of the {len(claim.cited_sources)} cited sources are available for {claim.id}",
+                extra={"claim_id": claim.id, "missing_sources": missing_sources}
             )
-            return self._create_error_result(claim, "Cited source not available")
+            return self._create_error_result(
+                claim, 
+                f"None of the {len(claim.cited_sources)} cited sources are available"
+            )
 
-        # Get excerpts and full content
-        excerpts = excerpts_by_url.get(cited_url, [])
-        full_content = scraped_content[cited_url]
-
-        # Format excerpts for prompt
-        excerpts_text = self._format_excerpts(excerpts)
-
-        # Truncate full content if too long
-        content_preview = full_content[:100000]
-        if len(full_content) > 100000:
-            content_preview += "\n\n[... content truncated ...]"
-
-        # Call LLM for verification
-        result = await self._verify_with_llm(
-            claim,
-            excerpts_text,
-            content_preview,
-            excerpts,  # ✅ Pass raw excerpts
-            cited_url  # ✅ Pass source URL
+        # Log verification details
+        fact_logger.logger.info(
+            f"  ✅ Checking {claim.id} against {len(available_sources)}/{len(claim.cited_sources)} sources ({len(all_excerpts)} total excerpts)",
+            extra={
+                "claim_id": claim.id,
+                "available_sources": len(available_sources),
+                "total_sources": len(claim.cited_sources),
+                "total_excerpts": len(all_excerpts)
+            }
         )
 
-        duration = time.time() - start_time
-        fact_logger.log_component_complete(
-            "LLMOutputVerifier",
-            duration,
+        # Format excerpts from all sources for verification
+        formatted_excerpts = self._format_multi_source_excerpts(
+            all_excerpts, 
+            available_sources,
+            scraped_content
+        )
+
+        # Build verification prompt with multi-source context
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", self.prompts["system"]),
+            ("user", self.prompts["user"])
+        ])
+
+        # Prepare source metadata for the prompt
+        sources_info = "\n".join([
+            f"[Source {i+1}]: {url}" 
+            for i, url in enumerate(available_sources)
+        ])
+
+        # Execute verification with GPT-4o
+        try:
+            fact_logger.logger.debug(
+                f"  🤖 Calling LLM for verification of {claim.id}",
+                extra={"claim_id": claim.id, "model": "gpt-4o"}
+            )
+
+            chain = prompt | self.llm | self.parser
+
+            response = await chain.ainvoke({
+                "claim_text": claim.claim_text,
+                "claim_context": claim.context,
+                "excerpts": formatted_excerpts,
+                "sources_info": sources_info,
+                "num_sources": len(available_sources),
+                "format_instructions": self.parser.get_format_instructions()
+            })
+
+            # Build result
+            result = LLMVerificationResult(
+                claim_id=claim.id,
+                claim_text=claim.claim_text,
+                verification_score=response.get('verification_score', 0.0),
+                assessment=response.get('assessment', 'No assessment provided'),
+                interpretation_issues=response.get('interpretation_issues', []),
+                wording_comparison=response.get('wording_comparison', {}),
+                confidence=response.get('confidence', 0.5),
+                reasoning=response.get('reasoning', 'No reasoning provided'),
+                excerpts=all_excerpts,  # Store all excerpts with source tags
+                cited_source_urls=available_sources  # ✅ Now a list of all checked sources
+            )
+
+            # Add warning about missing sources if any
+            if missing_sources:
+                missing_warning = f"⚠️ {len(missing_sources)} cited source(s) were unavailable: {', '.join([self._shorten_url(url) for url in missing_sources])}"
+                result.interpretation_issues.insert(0, missing_warning)
+
+                fact_logger.logger.warning(
+                    f"  ⚠️ {claim.id}: Some sources unavailable",
+                    extra={
+                        "claim_id": claim.id,
+                        "missing_count": len(missing_sources),
+                        "missing_sources": missing_sources
+                    }
+                )
+
+            elapsed_time = time.time() - start_time
+
+            fact_logger.logger.info(
+                f"  ✅ Verification complete for {claim.id}: {result.verification_score:.2f} ({elapsed_time:.1f}s)",
+                extra={
+                    "claim_id": claim.id,
+                    "score": result.verification_score,
+                    "duration": elapsed_time,
+                    "sources_checked": len(available_sources)
+                }
+            )
+
+            return result
+
+        except Exception as e:
+            fact_logger.logger.error(
+                f"❌ Verification failed for {claim.id}: {str(e)}",
+                extra={"claim_id": claim.id, "error": str(e)}
+            )
+            return self._create_error_result(claim, f"Verification error: {str(e)}")
+
+    def _format_multi_source_excerpts(
+        self, 
+        excerpts: List[Dict], 
+        source_urls: List[str],
+        scraped_content: Dict[str, str]
+    ) -> str:
+        """
+        Format excerpts from multiple sources for verification prompt
+
+        ✅ NEW: Groups excerpts by source and labels them clearly
+        """
+        if not excerpts:
+            return "No relevant excerpts found in any cited source."
+
+        # Group excerpts by source URL
+        excerpts_by_source = {}
+        for excerpt in excerpts:
+            source_url = excerpt.get('source_url', 'unknown')
+            if source_url not in excerpts_by_source:
+                excerpts_by_source[source_url] = []
+            excerpts_by_source[source_url].append(excerpt)
+
+        # Format output
+        formatted_parts = []
+
+        for idx, source_url in enumerate(source_urls, 1):
+            source_excerpts = excerpts_by_source.get(source_url, [])
+
+            formatted_parts.append(f"\n{'='*80}")
+            formatted_parts.append(f"SOURCE [{idx}]: {source_url}")
+            formatted_parts.append(f"{'='*80}")
+
+            if source_excerpts:
+                formatted_parts.append(f"\nFound {len(source_excerpts)} relevant excerpt(s):\n")
+
+                for i, excerpt in enumerate(source_excerpts, 1):
+                    relevance = excerpt.get('relevance', 0.0)
+                    quote = excerpt.get('quote', '')
+                    context = excerpt.get('context', '')
+
+                    formatted_parts.append(f"\nExcerpt {i} (Relevance: {relevance:.2f}):")
+                    formatted_parts.append(f'Quote: "{quote}"')
+                    if context and context != quote:
+                        formatted_parts.append(f'Context: "{context}"')
+                    formatted_parts.append("")
+            else:
+                formatted_parts.append("\nNo relevant excerpts found in this source.\n")
+
+        return "\n".join(formatted_parts)
+
+
+    def _shorten_url(self, url: str, max_length: int = 50) -> str:
+        """Shorten URL for display in warnings"""
+        if len(url) <= max_length:
+            return url
+        return url[:max_length-3] + "..."
+
+
+    def _create_error_result(self, claim: LLMClaim, error_message: str) -> LLMVerificationResult:
+        """Create an error result when verification cannot be performed"""
+        return LLMVerificationResult(
             claim_id=claim.id,
-            verification_score=result.verification_score
+            claim_text=claim.claim_text,
+            verification_score=0.0,
+            assessment=f"ERROR: {error_message}",
+            interpretation_issues=[error_message],
+            wording_comparison={},
+            confidence=0.0,
+            reasoning=f"Could not verify claim: {error_message}",
+            excerpts=[],
+            cited_source_urls=[]  # Empty list for errors
         )
-
-        return result
 
     def _format_excerpts(self, excerpts: List[Dict]) -> str:
         """Format excerpts for prompt"""
@@ -145,64 +322,3 @@ class LLMOutputVerifier:
             )
 
         return "\n".join(formatted)
-
-    @traceable(name="llm_verification_call", run_type="llm")
-    async def _verify_with_llm(
-        self,
-        claim: LLMClaim,
-        excerpts_text: str,
-        source_content: str,
-        excerpts: List[Dict],  # ✅ Add excerpts parameter
-        cited_url: str  # ✅ Add cited_url parameter
-    ) -> LLMVerificationResult:
-        """Call LLM for verification"""
-
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", self.prompts["system"]),
-            ("user", self.prompts["user"] + "\n\n{format_instructions}")
-        ])
-
-        prompt_with_format = prompt.partial(
-            format_instructions=self.parser.get_format_instructions()
-        )
-
-        callbacks = langsmith_config.get_callbacks(f"llm_verifier_{claim.id}")
-        chain = prompt_with_format | self.llm | self.parser
-
-        response = await chain.ainvoke(
-            {
-                "claim": claim.claim_text,  # ✅ Use claim_text
-                "original_context": claim.context,  # ✅ Use context
-                "excerpts": excerpts_text,
-                "source_content": source_content
-            },
-            config={"callbacks": callbacks.handlers}
-        )
-
-        return LLMVerificationResult(
-            claim_id=claim.id,
-            claim_text=claim.claim_text,
-            verification_score=response['verification_score'],
-            assessment=response['assessment'],
-            interpretation_issues=response.get('interpretation_issues', []),
-            wording_comparison=response.get('wording_comparison', {}),
-            confidence=response['confidence'],
-            reasoning=response['reasoning'],
-            excerpts=excerpts,  # ✅ Store the excerpts
-            cited_source_url=cited_url  # ✅ Store the source URL
-        )
-
-    def _create_error_result(self, claim: LLMClaim, error_msg: str) -> LLMVerificationResult:
-        """Create error result when verification can't be performed"""
-        return LLMVerificationResult(
-            claim_id=claim.id,
-            claim_text=claim.claim_text,
-            verification_score=0.0,
-            assessment=f"ERROR: {error_msg}",
-            interpretation_issues=[error_msg],
-            wording_comparison={},
-            confidence=0.0,
-            reasoning=f"Could not verify: {error_msg}",
-            excerpts=[],  # ✅ Empty excerpts for errors
-            cited_source_url=claim.cited_source if hasattr(claim, 'cited_source') else ""  # ✅ Include URL if available
-        )

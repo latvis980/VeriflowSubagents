@@ -362,8 +362,14 @@ class LLMInterpretationOrchestrator:
                         report_lines.append(f"      \"{quote}\"")
                 if len(result.excerpts) > 3:
                     report_lines.append(f"  ... and {len(result.excerpts) - 3} more excerpts")
-                if result.cited_source_url:
-                    report_lines.append(f"  Source: {result.cited_source_url}")
+                # ✅ Display all checked sources (now a list)
+                if result.cited_source_urls:
+                    if len(result.cited_source_urls) == 1:
+                        report_lines.append(f"  Source: {result.cited_source_urls[0]}")
+                    else:
+                        report_lines.append(f"  Sources ({len(result.cited_source_urls)} checked):")
+                        for i, url in enumerate(result.cited_source_urls, 1):
+                            report_lines.append(f"    [{i}] {url}")
 
             # ✅ Add detailed reasoning section
             if result.reasoning:

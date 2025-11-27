@@ -798,17 +798,49 @@ function createFactCard(fact, number) {
     }
 
     // Handle sources display
+    // Handle sources display
     let sourcesHtml = '';
-    if (fact.cited_source_url) {
-        // LLM verification: single cited source
+
+    // ✅ UPDATED: cited_source_urls is now an ARRAY (supports multiple sources)
+    if (fact.cited_source_urls && fact.cited_source_urls.length > 0) {
+        if (fact.cited_source_urls.length === 1) {
+            // Single source cited
+            sourcesHtml = `
+                <div class="fact-sources">
+                    <strong>📎 Source Cited:</strong> 
+                    <a href="${escapeHtml(fact.cited_source_urls[0])}" target="_blank" class="source-tag">
+                        ${new URL(fact.cited_source_urls[0]).hostname}
+                    </a>
+                </div>
+            `;
+        } else {
+            // Multiple sources cited (e.g., [4][6][9])
+            const sourceLinks = fact.cited_source_urls.map(url => 
+                `<a href="${escapeHtml(url)}" target="_blank" class="source-tag">
+                    ${new URL(url).hostname}
+                </a>`
+            ).join(' ');
+
+            sourcesHtml = `
+                <div class="fact-sources">
+                    <strong>📎 Sources Cited (${fact.cited_source_urls.length}):</strong> 
+                    ${sourceLinks}
+                </div>
+            `;
+        }
+    } else if (fact.sources_used && fact.sources_used.length > 0) {
+        // Web search: multiple sources
         sourcesHtml = `
             <div class="fact-sources">
-                <strong>📎 Source Cited:</strong> 
-                <a href="${escapeHtml(fact.cited_source_url)}" target="_blank" class="source-tag">
-                    ${new URL(fact.cited_source_url).hostname}
-                </a>
+                <strong>🔍 Sources Found:</strong> 
+                ${fact.sources_used.map(url => 
+                    `<a href="${escapeHtml(url)}" target="_blank" class="source-tag">
+                        ${new URL(url).hostname}
+                    </a>`
+                ).join(' ')}
             </div>
         `;
+        }
     } else if (fact.sources_used && fact.sources_used.length > 0) {
         // Web search: multiple sources
         sourcesHtml = `

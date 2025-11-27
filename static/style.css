@@ -503,6 +503,7 @@ kbd {
     width: 100%;
     position: relative;
     overflow: hidden;
+    min-height: 90px;  /* ← ADD THIS LINE */
 }
 
 .option-card::before {

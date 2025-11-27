@@ -29,11 +29,11 @@ Input: "Takoyaki is topped with sauce, mayo, and bonito [4][6][9]"
 Source Links: [1]: url1, [4]: url4, [6]: url6, [9]: url9
 
 Output:
-{
+{{
   "claim_text": "Takoyaki is topped with sauce, mayo, and bonito",
-  "cited_sources": ["url4", "url6", "url9"],  # ALL three sources
+  "cited_sources": ["url4", "url6", "url9"],
   ...
-}
+}}
 
 IMPORTANT RULES:
 1. **PRESERVE ORIGINAL WORDING**: Don't paraphrase or atomize - keep the LLM's exact phrasing
@@ -60,13 +60,13 @@ Your Output:
   "claims": [
     {{
       "claim_text": "AI models can now process images 3x faster than previous versions. The research also found significant improvements in accuracy.",
-      "cited_source": "https://example.com/study",
+      "cited_sources": ["https://example.com/study"],
       "context": "According to a recent study from Stanford [...], AI models can now process images 3x faster than previous versions. The research also found significant improvements in accuracy. Meanwhile, other studies suggest...",
       "confidence": 0.95
     }},
     {{
       "claim_text": "other studies suggest different approaches are needed",
-      "cited_source": "https://other.com",
+      "cited_sources": ["https://other.com"],
       "context": "...The research also found significant improvements in accuracy. Meanwhile, other studies [https://other.com] suggest different approaches are needed.",
       "confidence": 0.85
     }}
@@ -81,7 +81,7 @@ Return ONLY valid JSON in this exact format:
   "claims": [
     {{
       "claim_text": "exact text from LLM output",
-      "cited_source": "https://source-url-cited.com",
+      "cited_sources": ["https://source-url1.com", "https://source-url2.com"],
       "context": "surrounding text for context",
       "confidence": 0.90
     }}
@@ -100,18 +100,18 @@ SOURCE LINKS FOUND:
 INSTRUCTIONS:
 1. Identify factual claim segments in the LLM output
 2. Preserve the LLM's original wording (don't paraphrase)
-3. Map each claim to the source URL cited nearby
+3. Map each claim to the source URL(s) cited nearby
 4. Include surrounding context (before and after the claim)
 5. Focus on source-backed claims, not opinions
-6. Keep related claims together if they cite the same source
+6. Keep related claims together if they share one source
+7. If multiple sources are cited together [1][2][3], include ALL of them in cited_sources list
 
 IMPORTANT:
 - Don't break down compound statements if they share one source
 - Include enough context to check for cherry-picking
 - The claim_text should be the LLM's exact words
-- The cited_source should be the exact URL from the source links
-
-{format_instructions}
+- The cited_sources should be a LIST of exact URLs from the source links
+- If claim has [4][6][9], extract all three URLs into the cited_sources array
 
 Extract all claim segments now."""
 

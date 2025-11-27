@@ -209,44 +209,65 @@ class LLMInterpretationOrchestrator:
 
     @traceable(name="extract_excerpts_for_claim", run_type="chain")
     async def _extract_excerpts(self, claim, scraped_content: dict) -> dict:
-        """Extract relevant excerpts for a specific claim"""
+        """
+        Extract relevant excerpts for a claim from ALL its cited sources
+
+        ✅ UPDATED: Now handles multiple cited sources per claim
+        """
 
         fact_logger.logger.info(
-            f"🔦 Extracting excerpts for {claim.id}",
-            extra={"claim_id": claim.id, "cited_source": claim.cited_source}
+            f"🔦 Extracting excerpts for {claim.id} from {len(claim.cited_sources)} source(s)",
+            extra={
+                "claim_id": claim.id, 
+                "num_cited_sources": len(claim.cited_sources),
+                "cited_sources": claim.cited_sources
+            }
         )
 
-        # Only extract from the cited source
-        cited_url = claim.cited_source
+        # ✅ Extract excerpts from ALL cited sources
+        all_excerpts_by_url = {}
 
-        if cited_url not in scraped_content or not scraped_content[cited_url]:
-            fact_logger.logger.warning(
-                f"⚠️ Cited source not available: {cited_url}",
-                extra={"claim_id": claim.id, "url": cited_url}
+        for cited_url in claim.cited_sources:
+            if cited_url not in scraped_content or not scraped_content[cited_url]:
+                fact_logger.logger.warning(
+                    f"⚠️ Cited source not available: {cited_url}",
+                    extra={"claim_id": claim.id, "url": cited_url}
+                )
+                all_excerpts_by_url[cited_url] = []
+                continue
+
+            # ✅ Create a Fact-like object for Highlighter
+            simple_fact = SimpleFact(
+                id=claim.id,
+                statement=claim.claim_text
             )
-            return {}
 
-        # ✅ Create a Fact-like object for Highlighter
-        simple_fact = SimpleFact(
-            id=claim.id,
-            statement=claim.claim_text
-        )
+            # ✅ Create proper dict format: {url: content}
+            cited_content = {cited_url: scraped_content[cited_url]}
 
-        # ✅ Create proper dict format: {url: content}
-        cited_content = {cited_url: scraped_content[cited_url]}
+            # ✅ Call highlighter with correct signature (2 args)
+            excerpts_dict = await self.highlighter.highlight(simple_fact, cited_content)
 
-        # ✅ Call highlighter with correct signature (2 args, not 3)
-        excerpts_dict = await self.highlighter.highlight(simple_fact, cited_content)
+            # Extract excerpts list for this URL
+            excerpts = excerpts_dict.get(cited_url, [])
+            all_excerpts_by_url[cited_url] = excerpts
 
-        # Extract just the excerpts list for this URL
-        excerpts = excerpts_dict.get(cited_url, [])
+            fact_logger.logger.debug(
+                f"✂️ Extracted {len(excerpts)} excerpts from {cited_url}",
+                extra={
+                    "claim_id": claim.id, 
+                    "url": cited_url,
+                    "num_excerpts": len(excerpts)
+                }
+            )
 
+        total_excerpts = sum(len(e) for e in all_excerpts_by_url.values())
         fact_logger.logger.info(
-            f"✂️ Extracted {len(excerpts)} excerpts from cited source",
-            extra={"claim_id": claim.id, "num_excerpts": len(excerpts)}
+            f"✅ Total excerpts for {claim.id}: {total_excerpts} from {len(all_excerpts_by_url)} sources",
+            extra={"claim_id": claim.id, "total_excerpts": total_excerpts}
         )
 
-        return {cited_url: excerpts}
+        return all_excerpts_by_url
 
     def _get_score_emoji(self, score: float) -> str:
         """Get emoji based on verification score"""

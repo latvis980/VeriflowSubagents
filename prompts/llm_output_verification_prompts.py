@@ -100,26 +100,26 @@ Return ONLY valid JSON in this exact format:
   "reasoning": "The core fact (March 2017 opening) is accurate. The LLM used slightly different wording but preserved the essential meaning. Minor temporal precision issue noted but doesn't significantly affect accuracy."
 }}"""
 
-USER_PROMPT = """Verify if the LLM accurately interpreted its cited source.
+USER_PROMPT = """Verify if the LLM accurately interpreted its cited sources.
+
+You are checking {num_sources} source(s):
+{sources_info}
 
 LLM'S CLAIM:
-{claim}
+{claim_text}
 
 CONTEXT FROM LLM OUTPUT (for checking cherry-picking):
-{original_context}
+{claim_context}
 
-EXTRACTED EXCERPTS FROM SOURCE:
+EXTRACTED EXCERPTS FROM ALL CITED SOURCES:
 {excerpts}
 
-FULL SOURCE CONTENT (may be truncated):
-{source_content}
-
 INSTRUCTIONS:
-1. Compare the LLM's claim against what the source actually says
-2. Check if the excerpts accurately represent the source
+1. Compare the LLM's claim against what ALL cited sources actually say
+2. Check if the excerpts accurately represent the sources
 3. Use the context to check for cherry-picking or selective quotation
 4. Identify any distortions, omissions, or misinterpretations
-5. Consider both the excerpts AND the full source context
+5. If checking multiple sources, note if they agree or contradict each other
 6. Be fair - focus on substantive issues, not minor wording differences
 
 {format_instructions}

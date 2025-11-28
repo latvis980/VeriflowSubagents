@@ -17,6 +17,7 @@ For fact-checking ANY text, use web_search_orchestrator.py instead.
 
 from langsmith import traceable
 import time
+import asyncio
 
 from utils.html_parser import HTMLParser
 from utils.file_manager import FileManager
@@ -122,44 +123,67 @@ class LLMInterpretationOrchestrator:
                 f"✅ Scraped {successful_scrapes}/{len(unique_urls)} cited sources"
             )
 
-            # Step 4: Verify each claim's interpretation
+            # Step 4: Verify each claim's interpretation (✅ OPTIMIZED: Parallel processing)
             job_manager.add_progress(
                 job_id,
-                "🔬 Verifying how accurately LLM interpreted sources..."
+                f"🔬 Verifying {len(claims)} claims in parallel..."
             )
+            self._check_cancellation(job_id)
 
-            results = []
-            for i, claim in enumerate(claims, 1):
-                job_manager.add_progress(
-                    job_id,
-                    f"🔬 Checking claim {i}/{len(claims)}: \"{claim.claim_text[:60]}...\"",
-                    {'claim_id': claim.id, 'progress': f"{i}/{len(claims)}"}
-                )
-                self._check_cancellation(job_id)
+            # ✅ NEW: Create verification tasks for parallel execution
+            async def verify_single_claim(claim, claim_index):
+                """Verify a single claim and return result"""
+                try:
+                    # Extract relevant excerpts from the cited sources
+                    excerpts = await self._extract_excerpts(claim, all_scraped_content)
 
-                # Extract relevant excerpts from the cited source
-                excerpts = await self._extract_excerpts(claim, all_scraped_content)
+                    # Verify interpretation
+                    verification = await self.verifier.verify_interpretation(
+                        claim,
+                        excerpts,
+                        all_scraped_content
+                    )
 
-                # ✅ VERIFY INTERPRETATION
-                verification = await self.verifier.verify_interpretation(
-                    claim,
-                    excerpts,
-                    all_scraped_content
-                )
+                    # Update progress with score
+                    score_emoji = self._get_score_emoji(verification.verification_score)
+                    job_manager.add_progress(
+                        job_id,
+                        f"{score_emoji} {claim.id}: {verification.verification_score:.2f} - {verification.assessment[:50]}...",
+                        {
+                            'claim_id': claim.id,
+                            'score': verification.verification_score,
+                            'assessment': verification.assessment
+                        }
+                    )
 
-                results.append(verification)
+                    return verification
 
-                # Update progress with score
-                score_emoji = self._get_score_emoji(verification.verification_score)
-                job_manager.add_progress(
-                    job_id,
-                    f"{score_emoji} {claim.id}: {verification.verification_score:.2f} - {verification.assessment[:50]}...",
-                    {
-                        'claim_id': claim.id,
-                        'score': verification.verification_score,
-                        'assessment': verification.assessment
-                    }
-                )
+                except Exception as e:
+                    fact_logger.logger.error(f"❌ Error verifying {claim.id}: {e}")
+                    # Return a failed verification result
+                    from agents.llm_output_verifier import LLMVerificationResult
+                    return LLMVerificationResult(
+                        claim_id=claim.id,
+                        claim_text=claim.claim_text,
+                        verification_score=0.0,
+                        assessment=f"Verification error: {str(e)}",
+                        interpretation_issues=["Error during verification"],
+                        wording_comparison={},
+                        confidence=0.0,
+                        reasoning=str(e),
+                        excerpts=[],
+                        cited_source_urls=claim.cited_sources
+                    )
+
+            # ✅ Execute all verifications in parallel
+            verification_tasks = [
+                verify_single_claim(claim, i)
+                for i, claim in enumerate(claims, 1)
+            ]
+
+            results = await asyncio.gather(*verification_tasks, return_exceptions=False)
+
+            job_manager.add_progress(job_id, "✅ All claims verified")
 
             # Step 5: Create summary
             job_manager.add_progress(job_id, "📊 Creating verification summary...")

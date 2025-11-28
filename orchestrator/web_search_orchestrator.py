@@ -55,7 +55,7 @@ class WebSearchOrchestrator:
 
         # Configuration
         self.max_sources_per_fact = 10  # Maximum sources to scrape per fact
-        self.max_concurrent_scrapes = 2  # Limit concurrent scraping
+        self.max_concurrent_scrapes = 5  # Limit concurrent scraping
 
         fact_logger.log_component_start(
             "WebSearchOrchestrator",
@@ -162,48 +162,72 @@ class WebSearchOrchestrator:
 
             job_manager.add_progress(job_id, "✅ Scraping complete")
 
-            # Step 6: Verify Facts
-            results = []
-            for i, fact in enumerate(facts, 1):
-                job_manager.add_progress(
-                    job_id,
-                    f"⚖️ Verifying fact {i}/{len(facts)}: \"{fact.statement[:60]}...\"",
-                    {'fact_id': fact.id, 'progress': f"{i}/{len(facts)}"}
-                )
-                self._check_cancellation(job_id)
+            # Step 6: Verify Facts (✅ OPTIMIZED: Parallel processing with asyncio.gather)
+            job_manager.add_progress(
+                job_id,
+                f"⚖️ Verifying {len(facts)} facts in parallel..."
+            )
+            self._check_cancellation(job_id)
 
-                scraped_content = scraped_content_by_fact.get(fact.id, {})
+            # ✅ NEW: Create verification tasks for parallel execution
+            async def verify_single_fact(fact, fact_index):
+                """Verify a single fact and return result"""
+                try:
+                    scraped_content = scraped_content_by_fact.get(fact.id, {})
 
-                if not scraped_content or not any(scraped_content.values()):
+                    if not scraped_content or not any(scraped_content.values()):
+                        from agents.fact_checker import FactCheckResult
+                        result = FactCheckResult(
+                            fact_id=fact.id,
+                            statement=fact.statement,
+                            match_score=0.0,
+                            assessment="Unable to verify - no credible sources found",
+                            discrepancies="No sources available for verification",
+                            confidence=0.0,
+                            reasoning="Web search did not yield credible sources"
+                        )
+                        job_manager.add_progress(job_id, f"⚠️ {fact.id}: No sources found")
+                        return result
+
+                    from agents.highlighter import Highlighter
+                    highlighter = Highlighter(self.config)
+
+                    excerpts = await highlighter.highlight(fact, scraped_content)
+                    check_result = await self.checker.check_fact(fact, excerpts)
+
+                    emoji = "✅" if check_result.match_score >= 0.9 else "⚠️" if check_result.match_score >= 0.7 else "❌"
+                    job_manager.add_progress(
+                        job_id,
+                        f"{emoji} {fact.id}: Score {check_result.match_score:.2f}"
+                    )
+
+                    return check_result
+
+                except Exception as e:
+                    fact_logger.logger.error(f"❌ Error verifying {fact.id}: {e}")
                     from agents.fact_checker import FactCheckResult
-                    result = FactCheckResult(
+                    return FactCheckResult(
                         fact_id=fact.id,
                         statement=fact.statement,
                         match_score=0.0,
-                        assessment="Unable to verify - no credible sources found",
-                        discrepancies="No sources available for verification",
+                        assessment=f"Verification error: {str(e)}",
+                        discrepancies="Error during verification",
                         confidence=0.0,
-                        reasoning="Web search did not yield credible sources"
+                        reasoning=str(e)
                     )
-                    results.append(result)
-                    job_manager.add_progress(job_id, f"⚠️ {fact.id}: No sources found")
-                    continue
 
-                from agents.highlighter import Highlighter
-                highlighter = Highlighter(self.config)
+            # ✅ Execute all verifications in parallel
+            verification_tasks = [
+                verify_single_fact(fact, i)
+                for i, fact in enumerate(facts, 1)
+            ]
 
-                excerpts = await highlighter.highlight(fact, scraped_content)
-                check_result = await self.checker.check_fact(fact, excerpts)
-                results.append(check_result)
+            results = await asyncio.gather(*verification_tasks, return_exceptions=False)
 
-                emoji = "✅" if check_result.match_score >= 0.9 else "⚠️" if check_result.match_score >= 0.7 else "❌"
-                job_manager.add_progress(
-                    job_id,
-                    f"{emoji} {fact.id}: Score {check_result.match_score:.2f}"
-                )
-                self._check_cancellation(job_id)
-
+            # Sort by match score (lowest first to surface issues)
             results.sort(key=lambda x: x.match_score)
+
+            job_manager.add_progress(job_id, "✅ All facts verified")
 
             # Save and upload to R2
             job_manager.add_progress(job_id, "💾 Saving results...")

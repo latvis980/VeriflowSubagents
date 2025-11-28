@@ -37,7 +37,7 @@ class FactCheckScraper:
         self.replica_id = os.getenv('RAILWAY_REPLICA_ID', '0')
 
         # ✅ NEW: Browser pool for persistent sessions
-        self.max_concurrent = 3  # Number of concurrent browsers
+        self.max_concurrent = 10  # Number of concurrent browsers
         self.playwright = None
         self.browser_pool: List[Browser] = []
         self.current_browser_index = 0
@@ -281,7 +281,7 @@ class FactCheckScraper:
 
             # Navigate
             await page.goto(url, wait_until="domcontentloaded", timeout=timeout)
-            await asyncio.sleep(1.0)  # Reduced from 2.0 to 1.0 seconds
+            await asyncio.sleep(0.5)  # Reduced from 1.0 to 0.5
 
             # Extract content
             content = await self._extract_structured_content(page)

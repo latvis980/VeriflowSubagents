@@ -390,42 +390,12 @@ async function runLLMVerification(content) {
 }
 
 async function streamLLMVerificationProgress(jobId) {
-    return new Promise((resolve, reject) => {
-        const eventSource = new EventSource(`/api/job/${jobId}/stream`);
-        activeEventSources.push(eventSource);
-
-        eventSource.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-
-            console.log('LLM Verification SSE:', data);
-
-            if (data.heartbeat) {
-                return;
-            }
-
-            if (data.status === 'completed') {
-                currentLLMVerificationResults = data.result;
-                console.log('LLM Verification completed:', data.result);
-                addProgress('✅ LLM interpretation verification completed');
-                eventSource.close();
-                resolve(data.result);
-            } else if (data.status === 'failed') {
-                console.error('LLM Verification failed:', data.error);
-                addProgress(`❌ LLM verification failed: ${data.error}`, 'error');
-                eventSource.close();
-                reject(new Error(data.error));
-            } else if (data.message) {
-                console.log('Progress:', data.message);
-                addProgress(data.message);
-            }
-        };
-
-        eventSource.onerror = (error) => {
-            console.error('LLM verification stream error:', error);
-            eventSource.close();
-            reject(new Error('Stream connection failed'));
-        };
-    });
+    // ✅ Use the optimized streamJobProgress with reconnection
+    const result = await streamJobProgress(jobId, '🔍');
+    currentLLMVerificationResults = result;
+    console.log('LLM Verification completed:', result);
+    addProgress('✅ LLM interpretation verification completed');
+    return result;
 }
 
 // ============================================
@@ -463,6 +433,26 @@ async function runFactCheck(content) {
 }
 
 async function streamFactCheckProgress(jobId) {
+    // ✅ Use the optimized streamJobProgress with reconnection
+    const result = await streamJobProgress(jobId, '🔎');
+    currentFactCheckResults = result;
+    console.log('Fact check completed:', result);
+    addProgress('✅ Fact checking completed');
+    return result;
+}
+
+// ============================================
+// UNIFIED STREAMING WITH AUTO-RECONNECTION
+// ============================================
+
+/**
+ * ✅ OPTIMIZED: Stream job progress with automatic reconnection
+ * This replaces the duplicate SSE code in all streaming functions
+ */
+function streamJobProgress(jobId, emoji = '⏳', reconnectAttempts = 0) {
+    const maxReconnects = 3;
+    const baseDelay = 2000; // 2 seconds
+
     return new Promise((resolve, reject) => {
         const eventSource = new EventSource(`/api/job/${jobId}/stream`);
         activeEventSources.push(eventSource);
@@ -470,33 +460,66 @@ async function streamFactCheckProgress(jobId) {
         eventSource.onmessage = (event) => {
             const data = JSON.parse(event.data);
 
-            console.log('Fact Check SSE:', data);
-
+            // Handle heartbeat (no action needed)
             if (data.heartbeat) {
                 return;
             }
 
+            // Handle completed status
             if (data.status === 'completed') {
-                currentFactCheckResults = data.result;
-                console.log('Fact check completed:', data.result);
-                addProgress('✅ Fact checking completed');
+                addProgress(`${emoji} Complete!`);
                 eventSource.close();
                 resolve(data.result);
-            } else if (data.status === 'failed') {
-                console.error('Fact check failed:', data.error);
-                addProgress(`❌ Fact check failed: ${data.error}`, 'error');
+                return;
+            }
+
+            // Handle failed status
+            if (data.status === 'failed') {
+                addProgress(`${emoji} Failed: ${data.error || 'Unknown error'}`, 'error');
                 eventSource.close();
-                reject(new Error(data.error));
-            } else if (data.message) {
-                console.log('Progress:', data.message);
+                reject(new Error(data.error || 'Job failed'));
+                return;
+            }
+
+            // Handle cancelled status
+            if (data.status === 'cancelled') {
+                addProgress(`${emoji} Job cancelled`);
+                eventSource.close();
+                reject(new Error('Job cancelled by user'));
+                return;
+            }
+
+            // Handle progress messages
+            if (data.message) {
                 addProgress(data.message);
+            }
+
+            // Handle generic status updates (for bias/lie detection)
+            if (data.status && !data.message) {
+                addProgress(`🔄 ${data.status}`);
             }
         };
 
         eventSource.onerror = (error) => {
-            console.error('Fact check stream error:', error);
+            console.error('EventSource error:', error);
             eventSource.close();
-            reject(new Error('Stream connection failed'));
+
+            // ✅ NEW: Automatic reconnection with exponential backoff
+            if (reconnectAttempts < maxReconnects) {
+                const delay = baseDelay * Math.pow(2, reconnectAttempts);
+                console.log(`Connection lost. Reconnecting in ${delay/1000}s... (Attempt ${reconnectAttempts + 1}/${maxReconnects})`);
+                addProgress(`⚠️ Connection lost. Reconnecting in ${delay/1000}s...`);
+
+                setTimeout(() => {
+                    console.log(`Reconnecting to job ${jobId}...`);
+                    streamJobProgress(jobId, emoji, reconnectAttempts + 1)
+                        .then(resolve)
+                        .catch(reject);
+                }, delay);
+            } else {
+                addProgress(`❌ Connection failed after ${maxReconnects} attempts`, 'error');
+                reject(new Error('Stream connection failed after retries'));
+            }
         };
     });
 }
@@ -540,33 +563,11 @@ async function runBiasCheck(content) {
 }
 
 async function streamBiasProgress(jobId) {
-    return new Promise((resolve, reject) => {
-        const eventSource = new EventSource(`/api/job/${jobId}/stream`);
-        activeEventSources.push(eventSource);
-
-        eventSource.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-
-            if (data.status === 'completed') {
-                currentBiasResults = data.result;
-                addProgress('✅ Bias analysis completed');
-                eventSource.close();
-                resolve(data.result);
-            } else if (data.status === 'failed') {
-                addProgress(`❌ Bias analysis failed: ${data.error}`, 'error');
-                eventSource.close();
-                reject(new Error(data.error));
-            } else if (data.status) {
-                addProgress(`🔄 ${data.status}`);
-            }
-        };
-
-        eventSource.onerror = (error) => {
-            console.error('Bias stream error:', error);
-            eventSource.close();
-            reject(new Error('Stream connection failed'));
-        };
-    });
+    // ✅ Use the optimized streamJobProgress with reconnection
+    const result = await streamJobProgress(jobId, '📊');
+    currentBiasResults = result;
+    addProgress('✅ Bias analysis completed');
+    return result;
 }
 
 // ============================================
@@ -605,33 +606,11 @@ async function runLieDetection(content) {
 }
 
 async function streamLieDetectionProgress(jobId) {
-    return new Promise((resolve, reject) => {
-        const eventSource = new EventSource(`/api/job/${jobId}/stream`);
-        activeEventSources.push(eventSource);
-
-        eventSource.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-
-            if (data.status === 'completed') {
-                currentLieDetectionResults = data.result;
-                addProgress('✅ Lie detection analysis completed');
-                eventSource.close();
-                resolve(data.result);
-            } else if (data.status === 'failed') {
-                addProgress(`❌ Lie detection failed: ${data.error}`, 'error');
-                eventSource.close();
-                reject(new Error(data.error));
-            } else if (data.status) {
-                addProgress(`🔄 ${data.status}`);
-            }
-        };
-
-        eventSource.onerror = (error) => {
-            console.error('Lie detection stream error:', error);
-            eventSource.close();
-            reject(new Error('Stream connection failed'));
-        };
-    });
+    // ✅ Use the optimized streamJobProgress with reconnection
+    const result = await streamJobProgress(jobId, '🕵️');
+    currentLieDetectionResults = result;
+    addProgress('✅ Lie detection analysis completed');
+    return result;
 }
 
 // ============================================

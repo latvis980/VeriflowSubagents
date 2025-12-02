@@ -11,10 +11,12 @@ from orchestrator.llm_output_orchestrator import LLMInterpretationOrchestrator
 from orchestrator.web_search_orchestrator import WebSearchOrchestrator
 from orchestrator.bias_check_orchestrator import BiasCheckOrchestrator
 from orchestrator.lie_detector_orchestrator import LieDetectorOrchestrator
+from orchestrator.key_claims_orchestrator import KeyClaimsOrchestrator
 from utils.logger import fact_logger
 from utils.langsmith_config import langsmith_config
 from utils.job_manager import job_manager
 from utils.async_utils import run_async_in_thread, cleanup_thread_loop
+
 
 import nest_asyncio
 nest_asyncio.apply()
@@ -83,6 +85,16 @@ try:
 except Exception as e:
     fact_logger.logger.error(f"❌ Failed to initialize Lie Detector Orchestrator: {e}")
     lie_detector_orchestrator = None
+
+# 5. Key Claims Orchestrator (extracts and verifies 2-3 central thesis claims)
+key_claims_orchestrator: Optional[KeyClaimsOrchestrator] = None
+if config.tavily_api_key:
+    try:
+        key_claims_orchestrator = KeyClaimsOrchestrator(config)
+        fact_logger.logger.info("✅ Key Claims Orchestrator initialized successfully")
+    except Exception as e:
+        fact_logger.logger.error(f"❌ Failed to initialize Key Claims Orchestrator: {e}")
+        key_claims_orchestrator = None
 
 # Log summary
 fact_logger.logger.info("📊 Orchestrator initialization complete:")
@@ -198,6 +210,44 @@ def check_facts():
             "error": str(e),
             "message": "An error occurred during fact checking"
         }), 500
+
+@app.route('/api/key-claims', methods=['POST'])
+def check_key_claims():
+    """Extract and verify key claims from text"""
+    try:
+        request_json = request.get_json()
+        content = request_json.get('content')
+
+        if not content:
+            return jsonify({"error": "No content provided"}), 400
+
+        if key_claims_orchestrator is None:
+            return jsonify({"error": "Key claims pipeline not available"}), 503
+
+        job_id = job_manager.create_job(content)
+
+        thread = threading.Thread(
+            target=run_key_claims_task,
+            args=(job_id, content)
+        )
+        thread.start()
+
+        return jsonify({"job_id": job_id, "status": "started"})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+def run_key_claims_task(job_id: str, content: str):
+    """Background task runner for key claims verification"""
+    try:
+        result = run_async_in_thread(
+            key_claims_orchestrator.process_with_progress(content, job_id)
+        )
+        job_manager.complete_job(job_id, result)
+    except Exception as e:
+        job_manager.fail_job(job_id, str(e))
+    finally:
+        cleanup_thread_loop()
 
 
 @app.route('/api/check-bias', methods=['POST'])

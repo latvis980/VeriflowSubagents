@@ -1,4 +1,4 @@
-// static/app.js - Enhanced with proper pipeline separation
+// static/app.js - Enhanced with proper pipeline separation + Key Claims mode
 
 // ============================================
 // DOM ELEMENTS
@@ -20,6 +20,7 @@ const progressLog = document.getElementById('progressLog');
 const modeTabs = document.querySelectorAll('.mode-tab');
 const llmOutputInstructions = document.getElementById('llmOutputInstructions');
 const textFactcheckInstructions = document.getElementById('textFactcheckInstructions');
+const keyClaimsInstructions = document.getElementById('keyClaimsInstructions');
 const biasAnalysisInstructions = document.getElementById('biasAnalysisInstructions');
 const lieDetectionInstructions = document.getElementById('lieDetectionInstructions');
 const inputSectionTitle = document.getElementById('inputSectionTitle');
@@ -29,6 +30,7 @@ const contentFormatIndicator = document.getElementById('contentFormatIndicator')
 // Modal elements
 const plainTextModal = document.getElementById('plainTextModal');
 const switchToTextMode = document.getElementById('switchToTextMode');
+const switchToKeyClaimsMode = document.getElementById('switchToKeyClaimsMode');
 const switchToBiasMode = document.getElementById('switchToBiasMode');
 const switchToLieMode = document.getElementById('switchToLieMode');
 const continueAnyway = document.getElementById('continueAnyway');
@@ -36,9 +38,11 @@ const closeModal = document.getElementById('closeModal');
 
 // Tab elements
 const factCheckTab = document.getElementById('factCheckTab');
+const keyClaimsTab = document.getElementById('keyClaimsTab');
 const biasAnalysisTab = document.getElementById('biasAnalysisTab');
 const lieDetectionTab = document.getElementById('lieDetectionTab');
 const factCheckResults = document.getElementById('factCheckResults');
+const keyClaimsResults = document.getElementById('keyClaimsResults');
 const biasAnalysisResults = document.getElementById('biasAnalysisResults');
 const lieDetectionResults = document.getElementById('lieDetectionResults');
 
@@ -46,6 +50,7 @@ const lieDetectionResults = document.getElementById('lieDetectionResults');
 const modelTabs = document.querySelectorAll('.model-tab');
 
 const factsList = document.getElementById('factsList');
+const keyClaimsList = document.getElementById('keyClaimsList');
 const exportBtn = document.getElementById('exportBtn');
 const newCheckBtn = document.getElementById('newCheckBtn');
 const retryBtn = document.getElementById('retryBtn');
@@ -54,15 +59,17 @@ const retryBtn = document.getElementById('retryBtn');
 // STATE
 // ============================================
 
-let currentMode = 'llm-output'; // 'llm-output', 'text-factcheck', 'bias-analysis', 'lie-detection'
-let currentLLMVerificationResults = null;  // ✅ NEW: Separate for LLM interpretation checking
-let currentFactCheckResults = null;        // ✅ UPDATED: Only for web search fact-checking
+let currentMode = 'llm-output'; // 'llm-output', 'text-factcheck', 'key-claims', 'bias-analysis', 'lie-detection'
+let currentLLMVerificationResults = null;
+let currentFactCheckResults = null;
+let currentKeyClaimsResults = null;  // NEW: Key Claims results
 let currentBiasResults = null;
 let currentLieDetectionResults = null;
 let activeEventSources = [];
 let currentJobIds = {
-    llmVerification: null,  // ✅ NEW
+    llmVerification: null,
     factCheck: null,
+    keyClaims: null,  // NEW
     biasCheck: null,
     lieDetection: null
 };
@@ -83,6 +90,9 @@ function switchMode(mode) {
     // Update instructions visibility
     llmOutputInstructions.style.display = mode === 'llm-output' ? 'block' : 'none';
     textFactcheckInstructions.style.display = mode === 'text-factcheck' ? 'block' : 'none';
+    if (keyClaimsInstructions) {
+        keyClaimsInstructions.style.display = mode === 'key-claims' ? 'block' : 'none';
+    }
     biasAnalysisInstructions.style.display = mode === 'bias-analysis' ? 'block' : 'none';
     lieDetectionInstructions.style.display = mode === 'lie-detection' ? 'block' : 'none';
 
@@ -93,7 +103,11 @@ function switchMode(mode) {
         publicationField.style.display = 'none';
     } else if (mode === 'text-factcheck') {
         inputSectionTitle.textContent = 'Paste Text to Fact-Check';
-        inputHelpText.textContent = 'Paste any text - we\'ll search the web to verify claims';
+        inputHelpText.textContent = 'Paste any text - we\'ll search the web to verify all claims';
+        publicationField.style.display = 'none';
+    } else if (mode === 'key-claims') {
+        inputSectionTitle.textContent = 'Paste Text for Key Claims Analysis';
+        inputHelpText.textContent = 'Paste any text - we\'ll identify and verify the 2-3 main arguments';
         publicationField.style.display = 'none';
     } else if (mode === 'bias-analysis') {
         inputSectionTitle.textContent = 'Paste Text to Analyze for Bias';
@@ -226,6 +240,18 @@ switchToTextMode.addEventListener('click', () => {
     }
 });
 
+// NEW: Key Claims mode from modal
+if (switchToKeyClaimsMode) {
+    switchToKeyClaimsMode.addEventListener('click', () => {
+        hidePlainTextModal();
+        switchMode('key-claims');
+        if (pendingContent) {
+            processContent(pendingContent, 'key-claims');
+            pendingContent = null;
+        }
+    });
+}
+
 switchToBiasMode.addEventListener('click', () => {
     hidePlainTextModal();
     switchMode('bias-analysis');
@@ -293,6 +319,9 @@ async function handleAnalyze() {
     } else if (currentMode === 'text-factcheck') {
         processContent(content, 'text');
 
+    } else if (currentMode === 'key-claims') {
+        processContent(content, 'key-claims');
+
     } else if (currentMode === 'bias-analysis') {
         processContent(content, 'bias');
 
@@ -314,25 +343,31 @@ async function processContent(content, type) {
     showSection(statusSection);
     clearProgressLog();
 
-    // ✅ CLEAR ALL RESULTS
+    // CLEAR ALL RESULTS
     currentLLMVerificationResults = null;
     currentFactCheckResults = null;
+    currentKeyClaimsResults = null;
     currentBiasResults = null;
     currentLieDetectionResults = null;
     currentJobIds.llmVerification = null;
     currentJobIds.factCheck = null;
+    currentJobIds.keyClaims = null;
     currentJobIds.biasCheck = null;
     currentJobIds.lieDetection = null;
 
     try {
         if (type === 'html') {
-            // ✅ LLM Output Verification Pipeline
+            // LLM Output Verification Pipeline
             addProgress('🔍 Starting LLM interpretation verification...');
             await runLLMVerification(content);
         } else if (type === 'text') {
-            // ✅ Web Search Fact-Checking Pipeline
+            // Web Search Fact-Checking Pipeline
             addProgress('🔍 Starting web search fact-checking...');
             await runFactCheck(content);
+        } else if (type === 'key-claims') {
+            // NEW: Key Claims Pipeline
+            addProgress('🎯 Starting key claims analysis...');
+            await runKeyClaimsCheck(content);
         } else if (type === 'bias') {
             addProgress('📊 Starting bias analysis...');
             await runBiasCheck(content);
@@ -390,7 +425,6 @@ async function runLLMVerification(content) {
 }
 
 async function streamLLMVerificationProgress(jobId) {
-    // ✅ Use the optimized streamJobProgress with reconnection
     const result = await streamJobProgress(jobId, '🔍');
     currentLLMVerificationResults = result;
     console.log('LLM Verification completed:', result);
@@ -433,7 +467,6 @@ async function runFactCheck(content) {
 }
 
 async function streamFactCheckProgress(jobId) {
-    // ✅ Use the optimized streamJobProgress with reconnection
     const result = await streamJobProgress(jobId, '🔎');
     currentFactCheckResults = result;
     console.log('Fact check completed:', result);
@@ -442,16 +475,53 @@ async function streamFactCheckProgress(jobId) {
 }
 
 // ============================================
+// KEY CLAIMS CHECKING (NEW)
+// ============================================
+
+async function runKeyClaimsCheck(content) {
+    try {
+        const response = await fetch('/api/key-claims', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                content: content
+            })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Key claims analysis failed');
+        }
+
+        const data = await response.json();
+        currentJobIds.keyClaims = data.job_id;
+
+        await streamKeyClaimsProgress(data.job_id);
+
+    } catch (error) {
+        console.error('Key claims error:', error);
+        addProgress(`❌ Key claims analysis failed: ${error.message}`, 'error');
+        throw error;
+    }
+}
+
+async function streamKeyClaimsProgress(jobId) {
+    const result = await streamJobProgress(jobId, '🎯');
+    currentKeyClaimsResults = result;
+    console.log('Key claims analysis completed:', result);
+    addProgress('✅ Key claims analysis completed');
+    return result;
+}
+
+// ============================================
 // UNIFIED STREAMING WITH AUTO-RECONNECTION
 // ============================================
 
-/**
- * ✅ OPTIMIZED: Stream job progress with automatic reconnection
- * This replaces the duplicate SSE code in all streaming functions
- */
 function streamJobProgress(jobId, emoji = '⏳', reconnectAttempts = 0) {
     const maxReconnects = 3;
-    const baseDelay = 2000; // 2 seconds
+    const baseDelay = 2000;
 
     return new Promise((resolve, reject) => {
         const eventSource = new EventSource(`/api/job/${jobId}/stream`);
@@ -460,12 +530,10 @@ function streamJobProgress(jobId, emoji = '⏳', reconnectAttempts = 0) {
         eventSource.onmessage = (event) => {
             const data = JSON.parse(event.data);
 
-            // Handle heartbeat (no action needed)
             if (data.heartbeat) {
                 return;
             }
 
-            // Handle completed status
             if (data.status === 'completed') {
                 addProgress(`${emoji} Complete!`);
                 eventSource.close();
@@ -473,7 +541,6 @@ function streamJobProgress(jobId, emoji = '⏳', reconnectAttempts = 0) {
                 return;
             }
 
-            // Handle failed status
             if (data.status === 'failed') {
                 addProgress(`${emoji} Failed: ${data.error || 'Unknown error'}`, 'error');
                 eventSource.close();
@@ -481,7 +548,6 @@ function streamJobProgress(jobId, emoji = '⏳', reconnectAttempts = 0) {
                 return;
             }
 
-            // Handle cancelled status
             if (data.status === 'cancelled') {
                 addProgress(`${emoji} Job cancelled`);
                 eventSource.close();
@@ -489,12 +555,10 @@ function streamJobProgress(jobId, emoji = '⏳', reconnectAttempts = 0) {
                 return;
             }
 
-            // Handle progress messages
             if (data.message) {
                 addProgress(data.message);
             }
 
-            // Handle generic status updates (for bias/lie detection)
             if (data.status && !data.message) {
                 addProgress(`🔄 ${data.status}`);
             }
@@ -504,7 +568,6 @@ function streamJobProgress(jobId, emoji = '⏳', reconnectAttempts = 0) {
             console.error('EventSource error:', error);
             eventSource.close();
 
-            // ✅ NEW: Automatic reconnection with exponential backoff
             if (reconnectAttempts < maxReconnects) {
                 const delay = baseDelay * Math.pow(2, reconnectAttempts);
                 console.log(`Connection lost. Reconnecting in ${delay/1000}s... (Attempt ${reconnectAttempts + 1}/${maxReconnects})`);
@@ -563,7 +626,6 @@ async function runBiasCheck(content) {
 }
 
 async function streamBiasProgress(jobId) {
-    // ✅ Use the optimized streamJobProgress with reconnection
     const result = await streamJobProgress(jobId, '📊');
     currentBiasResults = result;
     addProgress('✅ Bias analysis completed');
@@ -606,7 +668,6 @@ async function runLieDetection(content) {
 }
 
 async function streamLieDetectionProgress(jobId) {
-    // ✅ Use the optimized streamJobProgress with reconnection
     const result = await streamJobProgress(jobId, '🕵️');
     currentLieDetectionResults = result;
     addProgress('✅ Lie detection analysis completed');
@@ -621,14 +682,23 @@ function displayCombinedResults(type) {
     hideAllSections();
     showSection(resultsSection);
 
-    // ✅ Show appropriate tabs based on what results we have
+    // Show appropriate tabs based on what results we have
     const hasVerificationResults = currentLLMVerificationResults || currentFactCheckResults;
     factCheckTab.style.display = hasVerificationResults ? 'block' : 'none';
+    
+    // NEW: Key Claims tab
+    if (keyClaimsTab) {
+        keyClaimsTab.style.display = currentKeyClaimsResults ? 'block' : 'none';
+    }
+    
     biasAnalysisTab.style.display = currentBiasResults ? 'block' : 'none';
     lieDetectionTab.style.display = currentLieDetectionResults ? 'block' : 'none';
 
-    // Display results
-    if (currentLLMVerificationResults || currentFactCheckResults) {
+    // Display results based on type
+    if (type === 'key-claims' && currentKeyClaimsResults) {
+        displayKeyClaimsResults();
+        switchResultTab('key-claims');
+    } else if (currentLLMVerificationResults || currentFactCheckResults) {
         displayVerificationResults();
         switchResultTab('fact-check');
     } else if (currentBiasResults) {
@@ -641,22 +711,110 @@ function displayCombinedResults(type) {
 }
 
 // ============================================
+// DISPLAY KEY CLAIMS RESULTS (NEW)
+// ============================================
+
+function displayKeyClaimsResults() {
+    if (!currentKeyClaimsResults) {
+        console.error('No key claims results available');
+        return;
+    }
+
+    console.log('📦 Displaying Key Claims Results:', currentKeyClaimsResults);
+
+    const data = currentKeyClaimsResults;
+    const claims = data.key_claims || [];
+    const summary = data.summary || {};
+
+    // Update summary stats
+    document.getElementById('kcTotalClaims').textContent = summary.total_key_claims || claims.length || 0;
+    document.getElementById('kcVerifiedCount').textContent = summary.verified_count || 0;
+    document.getElementById('kcPartialCount').textContent = summary.partial_count || 0;
+    document.getElementById('kcUnverifiedCount').textContent = summary.unverified_count || 0;
+    
+    // Overall credibility
+    const credibilityEl = document.getElementById('kcOverallCredibility');
+    if (credibilityEl) {
+        credibilityEl.textContent = summary.overall_credibility || '-';
+    }
+
+    // Session info
+    document.getElementById('kcSessionId').textContent = data.session_id || '-';
+    document.getElementById('kcProcessingTime').textContent = Math.round(data.processing_time || 0) + 's';
+
+    // R2 link
+    const r2Link = document.getElementById('kcR2Link');
+    const r2Sep = document.getElementById('kcR2Sep');
+    if (data.r2_upload && data.r2_upload.success && data.r2_upload.url) {
+        r2Link.href = data.r2_upload.url;
+        r2Link.style.display = 'inline';
+        r2Sep.style.display = 'inline';
+    } else {
+        r2Link.style.display = 'none';
+        r2Sep.style.display = 'none';
+    }
+
+    // Render key claims list
+    keyClaimsList.innerHTML = '';
+    claims.forEach((claim, index) => {
+        keyClaimsList.appendChild(createKeyClaimCard(claim, index + 1));
+    });
+}
+
+function createKeyClaimCard(claim, number) {
+    const card = document.createElement('div');
+    card.className = 'fact-card key-claim-card';
+
+    const score = claim.match_score || 0;
+    const scoreClass = score >= 0.9 ? 'accurate' : score >= 0.7 ? 'good' : 'questionable';
+
+    const statementText = claim.statement || 'No statement available';
+    const assessmentText = claim.assessment || 'No assessment available';
+
+    let discrepanciesHtml = '';
+    if (claim.discrepancies && claim.discrepancies !== 'None identified') {
+        discrepanciesHtml = `
+            <div class="fact-discrepancies">
+                <strong>⚠️ Issues:</strong> ${escapeHtml(claim.discrepancies)}
+            </div>
+        `;
+    }
+
+    card.innerHTML = `
+        <div class="fact-header ${scoreClass}">
+            <div class="fact-title-row">
+                <span class="fact-number">#${number}</span>
+                <span class="claim-badge">KEY CLAIM</span>
+            </div>
+            <span class="fact-score ${scoreClass}">${Math.round(score * 100)}%</span>
+        </div>
+        <div class="fact-statement">${escapeHtml(statementText)}</div>
+        <div class="fact-assessment">${escapeHtml(assessmentText)}</div>
+        ${discrepanciesHtml}
+        ${claim.reasoning ? `
+            <details class="fact-reasoning-details">
+                <summary>View Reasoning</summary>
+                <p>${escapeHtml(claim.reasoning)}</p>
+            </details>
+        ` : ''}
+    `;
+
+    return card;
+}
+
+// ============================================
 // DISPLAY VERIFICATION RESULTS (Unified)
 // ============================================
 
 function displayVerificationResults() {
-    // ✅ Handle both LLM Verification and Web Search Fact-Checking
     let data, facts, sessionId, duration, pipelineType, auditUrl;
 
     if (currentLLMVerificationResults) {
-        // LLM Interpretation Verification
         console.log('📦 Displaying LLM Verification Results');
 
         if (currentLLMVerificationResults.factCheck) {
-            // New nested structure
             data = currentLLMVerificationResults.factCheck;
         } else {
-            // Fallback for direct structure
             data = currentLLMVerificationResults;
         }
 
@@ -667,7 +825,6 @@ function displayVerificationResults() {
         auditUrl = data.audit_url || currentLLMVerificationResults.audit_url;
 
     } else if (currentFactCheckResults) {
-        // Web Search Fact-Checking
         console.log('📦 Displaying Web Search Fact-Check Results');
 
         data = currentFactCheckResults;
@@ -684,7 +841,6 @@ function displayVerificationResults() {
 
     console.log(`📊 Processing ${facts.length} facts from ${pipelineType}`);
 
-    // Check for explicit failure
     if (data.success === false) {
         console.error('Verification marked as failed');
         showError('Verification failed. Please try again.');
@@ -693,7 +849,6 @@ function displayVerificationResults() {
 
     const totalFacts = facts.length;
 
-    // ✅ Handle both verification_score (LLM) and match_score (web search)
     const accurateFacts = facts.filter(f => 
         (f.verification_score || f.match_score || 0) >= 0.9
     ).length;
@@ -713,7 +868,6 @@ function displayVerificationResults() {
           ) / totalFacts * 100).toFixed(0)
         : 0;
 
-    // Update summary display
     document.getElementById('totalFacts').textContent = totalFacts;
     document.getElementById('accurateFacts').textContent = accurateFacts;
     document.getElementById('goodFacts').textContent = goodFacts;
@@ -723,7 +877,6 @@ function displayVerificationResults() {
     document.getElementById('sessionId').textContent = sessionId;
     document.getElementById('processingTime').textContent = Math.round(duration) + 's';
 
-    // Handle audit URL
     const auditLink = document.getElementById('auditLink');
     if (auditUrl) {
         auditLink.href = auditUrl;
@@ -732,7 +885,6 @@ function displayVerificationResults() {
         auditLink.style.display = 'none';
     }
 
-    // Display fact cards
     factsList.innerHTML = '';
     facts.forEach((fact, index) => {
         factsList.appendChild(createFactCard(fact, index + 1));
@@ -747,17 +899,12 @@ function createFactCard(fact, number) {
     const card = document.createElement('div');
     card.className = 'fact-card';
 
-    // Handle both verification_score (LLM) and match_score (web search)
     const score = fact.verification_score || fact.match_score || 0;
     const scoreClass = score >= 0.9 ? 'accurate' : score >= 0.7 ? 'good' : 'questionable';
 
-    // Handle both claim_text (LLM) and statement (web search)
     const statementText = fact.claim_text || fact.statement || 'No statement available';
-
-    // Handle assessment
     const assessmentText = fact.assessment || 'No assessment available';
 
-    // Handle discrepancies vs interpretation_issues
     let issuesHtml = '';
     if (fact.interpretation_issues && fact.interpretation_issues.length > 0) {
         issuesHtml = `
@@ -776,14 +923,10 @@ function createFactCard(fact, number) {
         `;
     }
 
-    // Handle sources display
-    // Handle sources display
     let sourcesHtml = '';
 
-    // ✅ UPDATED: cited_source_urls is now an ARRAY (supports multiple sources)
     if (fact.cited_source_urls && fact.cited_source_urls.length > 0) {
         if (fact.cited_source_urls.length === 1) {
-            // Single source cited
             sourcesHtml = `
                 <div class="fact-sources">
                     <strong>📎 Source Cited:</strong> 
@@ -793,7 +936,6 @@ function createFactCard(fact, number) {
                 </div>
             `;
         } else {
-            // Multiple sources cited (e.g., [4][6][9])
             const sourceLinks = fact.cited_source_urls.map(url => 
                 `<a href="${escapeHtml(url)}" target="_blank" class="source-tag">
                     ${new URL(url).hostname}
@@ -808,7 +950,6 @@ function createFactCard(fact, number) {
             `;
         }
     } else if (fact.sources_used && fact.sources_used.length > 0) {
-        // Web search: multiple sources
         sourcesHtml = `
             <div class="fact-sources">
                 <strong>🔍 Sources Found:</strong> 
@@ -819,7 +960,8 @@ function createFactCard(fact, number) {
                 ).join(' ')}
             </div>
         `;
-        }
+    }
+
     card.innerHTML = `
         <div class="fact-header">
             <span class="fact-number">#${number}</span>
@@ -845,7 +987,6 @@ function displayBiasResults() {
 
     const analysis = currentBiasResults.analysis;
 
-    // Display consensus score and direction
     const score = analysis.consensus_bias_score || 0;
     const direction = analysis.consensus_direction || 'Unknown';
     const confidence = analysis.confidence || 0;
@@ -854,17 +995,11 @@ function displayBiasResults() {
     document.getElementById('consensusBiasDirection').textContent = direction;
     document.getElementById('biasConfidence').textContent = Math.round(confidence * 100) + '%';
 
-    // Session info
     document.getElementById('biasSessionId').textContent = currentBiasResults.session_id || '-';
     document.getElementById('biasProcessingTime').textContent = Math.round(currentBiasResults.processing_time || 0) + 's';
 
-    // Display GPT analysis
     displayModelAnalysis('gpt', analysis.gpt_analysis);
-
-    // Display Claude analysis
     displayModelAnalysis('claude', analysis.claude_analysis);
-
-    // Display consensus
     displayConsensusAnalysis(analysis);
 }
 
@@ -873,10 +1008,8 @@ function displayModelAnalysis(model, data) {
 
     const prefix = model === 'gpt' ? 'gpt' : 'claude';
 
-    // Overall assessment
     document.getElementById(`${prefix}OverallAssessment`).textContent = data.reasoning || '-';
 
-    // Bias indicators
     const indicatorsList = document.getElementById(`${prefix}BiasIndicators`);
     indicatorsList.innerHTML = '';
 
@@ -890,13 +1023,11 @@ function displayModelAnalysis(model, data) {
         indicatorsList.innerHTML = '<li>No significant bias indicators detected</li>';
     }
 
-    // Language analysis (simplified)
     const languageText = data.balanced_aspects ? data.balanced_aspects.join(' • ') : 'Analysis complete';
     document.getElementById(`${prefix}LanguageAnalysis`).textContent = languageText;
 }
 
 function displayConsensusAnalysis(analysis) {
-    // Areas of agreement
     const agreementList = document.getElementById('areasOfAgreement');
     agreementList.innerHTML = '';
     (analysis.areas_of_agreement || []).forEach(item => {
@@ -905,7 +1036,6 @@ function displayConsensusAnalysis(analysis) {
         agreementList.appendChild(li);
     });
 
-    // Areas of disagreement
     const disagreementList = document.getElementById('areasOfDisagreement');
     disagreementList.innerHTML = '';
     (analysis.areas_of_disagreement || []).forEach(item => {
@@ -914,10 +1044,8 @@ function displayConsensusAnalysis(analysis) {
         disagreementList.appendChild(li);
     });
 
-    // Final assessment
     document.getElementById('finalAssessment').textContent = analysis.final_assessment || '-';
 
-    // Recommendations
     const recommendationsList = document.getElementById('recommendations');
     recommendationsList.innerHTML = '';
     (analysis.recommendations || []).forEach(rec => {
@@ -938,21 +1066,17 @@ function displayLieDetectionResults() {
 
     const analysis = currentLieDetectionResults.analysis;
 
-    // Display risk level with color coding
     const riskElement = document.getElementById('lieRiskLevel');
     riskElement.textContent = analysis.risk_level;
     riskElement.className = `risk-value risk-${analysis.risk_level.toLowerCase()}`;
 
-    // Display credibility score
     const scoreElement = document.getElementById('lieCredibilityScore');
     scoreElement.textContent = `${analysis.credibility_score}/100`;
     const credClass = analysis.credibility_score >= 80 ? 'high' : analysis.credibility_score >= 60 ? 'medium' : 'low';
     scoreElement.className = `credibility-value credibility-${credClass}`;
 
-    // Display overall assessment
     document.getElementById('lieOverallAssessment').textContent = analysis.overall_assessment;
 
-    // Display deception markers
     const markersContainer = document.getElementById('lieMarkersContainer');
     markersContainer.innerHTML = '';
 
@@ -965,7 +1089,6 @@ function displayLieDetectionResults() {
         markersContainer.innerHTML = '<p class="no-markers">✅ No significant deception markers detected.</p>';
     }
 
-    // Display positive indicators
     const positiveContainer = document.getElementById('liePositiveIndicators');
     positiveContainer.innerHTML = '';
 
@@ -982,17 +1105,12 @@ function displayLieDetectionResults() {
         positiveContainer.innerHTML = '<p>No positive indicators documented.</p>';
     }
 
-    // Display conclusion
     document.getElementById('lieConclusion').textContent = analysis.conclusion;
-
-    // Display detailed reasoning
     document.getElementById('lieDetailedReasoning').textContent = analysis.reasoning;
 
-    // Session info
     document.getElementById('lieSessionId').textContent = currentLieDetectionResults.session_id || '-';
     document.getElementById('lieProcessingTime').textContent = Math.round(currentLieDetectionResults.processing_time || 0) + 's';
 
-    // Display R2 link if available
     if (currentLieDetectionResults.r2_url) {
         const link = document.getElementById('lieR2Link');
         link.href = currentLieDetectionResults.r2_url;
@@ -1030,20 +1148,24 @@ function createMarkerCard(marker) {
 // ============================================
 
 function switchResultTab(tab) {
-    // Update tab buttons
     const tabButtons = document.querySelectorAll('.tab-btn');
     tabButtons.forEach(btn => {
         btn.classList.toggle('active', btn.dataset.tab === tab);
     });
 
-    // Update content
     factCheckResults.classList.toggle('active', tab === 'fact-check');
+    if (keyClaimsResults) {
+        keyClaimsResults.classList.toggle('active', tab === 'key-claims');
+    }
     biasAnalysisResults.classList.toggle('active', tab === 'bias-analysis');
     lieDetectionResults.classList.toggle('active', tab === 'lie-detection');
 }
 
 // Tab click listeners
 factCheckTab.addEventListener('click', () => switchResultTab('fact-check'));
+if (keyClaimsTab) {
+    keyClaimsTab.addEventListener('click', () => switchResultTab('key-claims'));
+}
 biasAnalysisTab.addEventListener('click', () => switchResultTab('bias-analysis'));
 lieDetectionTab.addEventListener('click', () => switchResultTab('lie-detection'));
 
@@ -1132,6 +1254,7 @@ clearBtn.addEventListener('click', () => {
     hideAllSections();
     currentLLMVerificationResults = null;
     currentFactCheckResults = null;
+    currentKeyClaimsResults = null;
     currentBiasResults = null;
     currentLieDetectionResults = null;
 });
@@ -1150,6 +1273,7 @@ newCheckBtn.addEventListener('click', () => {
     hideContentFormatIndicator();
     currentLLMVerificationResults = null;
     currentFactCheckResults = null;
+    currentKeyClaimsResults = null;
     currentBiasResults = null;
     currentLieDetectionResults = null;
 });
@@ -1165,6 +1289,7 @@ exportBtn.addEventListener('click', () => {
     const data = {
         llmVerification: currentLLMVerificationResults,
         factCheck: currentFactCheckResults,
+        keyClaims: currentKeyClaimsResults,
         biasAnalysis: currentBiasResults,
         lieDetection: currentLieDetectionResults,
         timestamp: new Date().toISOString()
@@ -1185,4 +1310,4 @@ exportBtn.addEventListener('click', () => {
 // INITIALIZATION
 // ============================================
 
-console.log('App initialized successfully with pipeline separation');
+console.log('App initialized successfully with pipeline separation + Key Claims mode');

@@ -1777,3 +1777,147 @@ footer a:hover {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
 }
+
+/* ============================================
+   KEY CLAIMS MODE - ADD TO style.css
+   ============================================ */
+
+/* Update mode-tabs grid to accommodate 5 tabs */
+.mode-tabs {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0.75rem;
+}
+
+/* Responsive: 3 + 2 layout on medium screens */
+@media (max-width: 1024px) {
+    .mode-tabs {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+/* Responsive: stack on mobile */
+@media (max-width: 768px) {
+    .mode-tabs {
+        grid-template-columns: 1fr;
+    }
+
+    .mode-tab {
+        flex-direction: row;
+        text-align: left;
+        gap: 1rem;
+    }
+
+    .mode-icon {
+        font-size: 1.5rem;
+        margin-bottom: 0;
+    }
+}
+
+/* Smaller text for 5 tabs */
+.mode-tab {
+    padding: 1rem 0.75rem;
+}
+
+.mode-label {
+    font-size: 0.9rem;
+}
+
+.mode-desc {
+    font-size: 0.75rem;
+}
+
+/* Key Claims specific styling */
+.instructions-card-keyclaims {
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    border: 1px solid #f59e0b;
+}
+
+.instructions-card-keyclaims h3 {
+    color: #92400e;
+}
+
+.instructions-card-keyclaims .step-number {
+    background: #f59e0b;
+}
+
+/* Key Claims option card in modal */
+.option-card-keyclaims {
+    border: 2px solid #f59e0b !important;
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%) !important;
+}
+
+.option-card-keyclaims:hover {
+    border-color: #d97706 !important;
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%) !important;
+}
+
+.option-card-keyclaims h4 {
+    color: #92400e !important;
+}
+
+/* Key Claims summary card */
+.summary-card-keyclaims {
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+    border: 2px solid #f59e0b;
+}
+
+.summary-card-keyclaims h3 {
+    color: #92400e;
+}
+
+/* Overall credibility display */
+.overall-credibility {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid rgba(245, 158, 11, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.credibility-label {
+    font-size: 0.95rem;
+    color: #78350f;
+    font-weight: 500;
+}
+
+.overall-credibility .credibility-value {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #92400e;
+}
+
+/* Key Claims results tab */
+.results-tab[data-tab="key-claims"] .tab-icon {
+    color: #f59e0b;
+}
+
+/* Key claim card styling - slightly different from regular facts */
+.key-claim-card {
+    border-left: 4px solid #f59e0b;
+    background: linear-gradient(135deg, #fffbeb 0%, #ffffff 100%);
+}
+
+.key-claim-card .fact-header {
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+}
+
+.key-claim-card .claim-badge {
+    background: #f59e0b;
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-left: 0.5rem;
+}
+
+/* Highlight key claims in progress log */
+.progress-log .key-claim-highlight {
+    background: #fef3c7;
+    border-left: 3px solid #f59e0b;
+    padding-left: 0.5rem;
+    margin: 0.25rem 0;
+}

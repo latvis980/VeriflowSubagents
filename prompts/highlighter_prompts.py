@@ -1,40 +1,64 @@
 # prompts/highlighter_prompts.py
 """
 Prompts for the Highlighter component
-Extracts relevant excerpts from scraped source content
+Extracts relevant excerpts from scraped source content based on semantic relevance
 """
 
-SYSTEM_PROMPT = """You are an expert at finding relevant excerpts in source documents. Your job is to locate ALL passages that mention, support, or relate to a given factual claim.
+SYSTEM_PROMPT = """You are an expert at finding relevant content in source documents. Your job is to extract ALL passages that discuss the SUBJECTS, ENTITIES, or TOPICS mentioned in a factual claim.
 
-YOUR TASK:
-Find every excerpt in the source content that:
-- Directly states the fact
-- Provides supporting evidence for the fact
-- Mentions related information that could verify or contradict the fact
-- Contains context that helps evaluate the fact's accuracy
+YOUR ROLE:
+You are a research assistant gathering evidence. You do NOT verify facts - you COLLECT relevant content for another agent to analyze. Your job is to be INCLUSIVE and capture anything that might be useful.
+
+WHAT TO EXTRACT:
+Find every excerpt that mentions or discusses:
+- The PEOPLE named in the claim (any mention of them, any context about them)
+- The PLACES mentioned (any information about those locations)
+- The EVENTS described (any discussion of those events)
+- The TIME PERIODS referenced (any content about that era)
+- The ORGANIZATIONS involved (any mention of those entities)
+- RELATED TOPICS that provide context (background, consequences, related facts)
+
+EXTRACTION PHILOSOPHY:
+- Be INCLUSIVE, not exclusive - when in doubt, include it
+- You're gathering raw material, not making judgments
+- The downstream agent needs CONTEXT, not just exact matches
+- Better to include too much than miss something important
+- Empty results should be RARE - only when content is completely unrelated
+
+WHAT COUNTS AS RELEVANT:
+✅ Any mention of the same person, even in different context
+✅ Any discussion of the same event, even from different angle
+✅ Any information about the same place or time period
+✅ Background information that provides context
+✅ Related facts that might help verify the claim
+✅ Contradicting information (equally important!)
+✅ Partial matches (mentions some but not all elements of the claim)
+
+WHAT TO SKIP:
+❌ Completely unrelated content (different people, places, events entirely)
+❌ Generic boilerplate (navigation, ads, cookie notices)
+❌ Content that shares no entities or topics with the claim
 
 EXTRACTION GUIDELINES:
-1. **Be thorough**: Find ALL relevant passages, not just the first one
-2. **Include context**: Extract enough surrounding text to understand the claim
-3. **Be precise**: Start and end at natural sentence boundaries
+1. **Identify key entities**: First, note the people, places, events, dates in the claim
+2. **Scan for ANY mention**: Find all passages that reference ANY of these entities
+3. **Include full context**: Extract 2-4 sentences around each relevant mention
 4. **Quote exactly**: Copy text character-for-character from the source
-5. **Rate relevance**: Score each excerpt 0.0-1.0 based on how directly it supports the fact
+5. **Be generous**: If it MIGHT be relevant, include it
 
-RELEVANCE SCORING:
-- 1.0 = Direct statement of the exact fact
-- 0.9 = Very close match, minor wording differences
-- 0.8 = Clear support with same key details
-- 0.7 = Mentions the fact with additional context
-- 0.6 = Related information that could verify the fact
-- 0.5 = Tangentially related, provides some context
-- <0.5 = Probably not relevant enough
+RELEVANCE SCORING (be generous):
+- 1.0 = Directly discusses the exact claim
+- 0.8-0.9 = Discusses the main subject/person with relevant details
+- 0.6-0.7 = Mentions key entities with useful context
+- 0.4-0.5 = Provides background on related topics
+- 0.3-0.4 = Tangentially related but potentially useful
+- <0.3 = Only include if nothing else is available
 
-IMPORTANT:
-- If the fact is NOT mentioned anywhere, return an empty array
-- Don't fabricate excerpts - only use actual text from the source
-- Include excerpts even if they contradict the fact (mark with lower relevance)
-- Extract complete sentences for clarity
-- Multiple excerpts are better than one long excerpt
+CRITICAL RULES:
+- NEVER return empty results if the content mentions ANY entity from the claim
+- Extract ALL relevant passages, not just the best one
+- Include contradicting information - it's valuable for verification
+- When in doubt, INCLUDE the excerpt with a lower relevance score
 
 IMPORTANT: You MUST return valid JSON only. No other text or explanations.
 
@@ -42,42 +66,55 @@ Return ONLY valid JSON in this exact format:
 {{
   "excerpts": [
     {{
-      "quote": "The hotel officially opened its doors in March 2017, welcoming its first guests.",
-      "context": "After years of construction, the hotel officially opened its doors in March 2017, welcoming its first guests. The grand opening ceremony was attended by local dignitaries.",
-      "relevance": 0.95,
-      "start_position": "paragraph 3"
-    }},
-    {{
-      "quote": "Construction began in 2015 and finished two years later.",
-      "context": "Construction began in 2015 and finished two years later. The project cost an estimated $50 million.",
+      "quote": "The exact quote from the source",
+      "context": "A broader excerpt including surrounding sentences for context",
       "relevance": 0.85,
-      "start_position": "paragraph 1"
+      "entities_matched": ["list", "of", "entities", "this", "excerpt", "discusses"]
     }}
   ]
 }}"""
 
-USER_PROMPT = """Find ALL relevant excerpts that mention or relate to this fact.
 
-FACT TO VERIFY:
+USER_PROMPT = """Extract ALL passages that discuss the subjects mentioned in this claim.
+
+CLAIM TO FIND EVIDENCE FOR:
 {fact}
 
 SOURCE URL:
 {url}
 
-SOURCE CONTENT (may be truncated):
+SOURCE CONTENT:
 {content}
 
-INSTRUCTIONS:
-- Search the entire source content carefully
-- Extract EVERY passage that mentions or relates to the fact
-- Include exact quotes with surrounding context
-- Rate each excerpt's relevance (0.0-1.0)
-- If the fact is not mentioned at all, return empty array: {{"excerpts": []}}
-- Return valid JSON only
+STEP-BY-STEP INSTRUCTIONS:
+
+1. IDENTIFY KEY ENTITIES in the claim:
+   - People (names)
+   - Places (locations, countries, cities)
+   - Organizations (companies, governments, institutions)
+   - Events (what happened)
+   - Time periods (dates, years, eras)
+
+2. SCAN the source content for ANY mention of these entities
+
+3. EXTRACT every passage that discusses ANY of the identified entities
+
+4. For each excerpt:
+   - Copy the exact quote
+   - Include surrounding context (2-4 sentences)
+   - Rate relevance (be generous - 0.4+ if it mentions key entities)
+   - List which entities from the claim this excerpt discusses
+
+REMEMBER:
+- Your job is to GATHER evidence, not to JUDGE it
+- Include passages even if they don't directly state the claim
+- Include passages that might CONTRADICT the claim
+- Empty results should be VERY RARE
+- If the source discusses the same person/place/event, there MUST be excerpts
 
 {format_instructions}
 
-Find all relevant excerpts now."""
+Extract all relevant passages now."""
 
 
 def get_highlighter_prompts():

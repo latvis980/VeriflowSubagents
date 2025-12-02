@@ -19,7 +19,7 @@ from agents.fact_extractor import Fact
 from prompts.highlighter_prompts import get_highlighter_prompts
 
 class HighlighterOutput(BaseModel):
-    excerpts: List[Dict[str, Any]] = Field(description="List of relevant excerpts")
+    excerpts: List[Dict[str, Any]] = Field(description="List of relevant excerpts with entities_matched")
 
 class Highlighter:
     """Extract relevant excerpts with LangSmith tracing and MAXIMUM context for GPT-4o"""

@@ -432,10 +432,8 @@ class KeyClaimsOrchestrator:
                 credible_urls = credibility_results.get_top_sources(self.max_sources_per_claim)
                 credible_urls_by_claim[claim.id] = [s.url for s in credible_urls]
 
-                # Store metadata for tier info
-                source_metadata_by_claim[claim.id] = {
-                    s.url: s for s in credibility_results.sources
-                }
+                # Store metadata for tier info - use the proper method that returns SourceMetadata
+                source_metadata_by_claim[claim.id] = credibility_results.get_source_metadata_dict()
 
             total_credible = sum(len(urls) for urls in credible_urls_by_claim.values())
             job_manager.add_progress(job_id, f"✅ Selected {total_credible} credible sources")

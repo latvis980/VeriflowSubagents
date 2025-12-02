@@ -682,31 +682,51 @@ function displayCombinedResults(type) {
     hideAllSections();
     showSection(resultsSection);
 
-    // Show appropriate tabs based on what results we have
-    const hasVerificationResults = currentLLMVerificationResults || currentFactCheckResults;
-    factCheckTab.style.display = hasVerificationResults ? 'block' : 'none';
-    
-    // NEW: Key Claims tab
-    if (keyClaimsTab) {
-        keyClaimsTab.style.display = currentKeyClaimsResults ? 'block' : 'none';
-    }
-    
-    biasAnalysisTab.style.display = currentBiasResults ? 'block' : 'none';
-    lieDetectionTab.style.display = currentLieDetectionResults ? 'block' : 'none';
+    // Hide ALL tabs first
+    factCheckTab.style.display = 'none';
+    if (keyClaimsTab) keyClaimsTab.style.display = 'none';
+    biasAnalysisTab.style.display = 'none';
+    lieDetectionTab.style.display = 'none';
 
-    // Display results based on type
-    if (type === 'key-claims' && currentKeyClaimsResults) {
-        displayKeyClaimsResults();
-        switchResultTab('key-claims');
-    } else if (currentLLMVerificationResults || currentFactCheckResults) {
-        displayVerificationResults();
-        switchResultTab('fact-check');
-    } else if (currentBiasResults) {
-        displayBiasResults();
-        switchResultTab('bias-analysis');
-    } else if (currentLieDetectionResults) {
-        displayLieDetectionResults();
-        switchResultTab('lie-detection');
+    // Show ONLY the tab for what was just run
+    switch (type) {
+        case 'html':
+            // LLM Output verification
+            factCheckTab.style.display = 'block';
+            displayVerificationResults();
+            switchResultTab('fact-check');
+            break;
+
+        case 'text':
+            // Web Search fact-check
+            factCheckTab.style.display = 'block';
+            displayVerificationResults();
+            switchResultTab('fact-check');
+            break;
+
+        case 'key-claims':
+            // Key Claims
+            if (keyClaimsTab) keyClaimsTab.style.display = 'block';
+            displayKeyClaimsResults();
+            switchResultTab('key-claims');
+            break;
+
+        case 'bias':
+            // Bias Analysis
+            biasAnalysisTab.style.display = 'block';
+            displayBiasResults();
+            switchResultTab('bias-analysis');
+            break;
+
+        case 'lie-detection':
+            // Lie Detection
+            lieDetectionTab.style.display = 'block';
+            displayLieDetectionResults();
+            switchResultTab('lie-detection');
+            break;
+
+        default:
+            console.error('Unknown result type:', type);
     }
 }
 
@@ -1149,40 +1169,32 @@ function createMarkerCard(marker) {
 // RESULT TABS
 // ============================================
 
-function switchResultTab(tab) {
-    const tabButtons = document.querySelectorAll('.tab-btn');
+ction switchResultTab(tab) {
+    // Fix: Use correct class selector 'results-tab'
+    const tabButtons = document.querySelectorAll('.results-tab');
     tabButtons.forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.tab === tab);
+        const isActive = 
+            (tab === 'fact-check' && btn.id === 'factCheckTab') ||
+            (tab === 'key-claims' && btn.id === 'keyClaimsTab') ||
+            (tab === 'bias-analysis' && btn.id === 'biasAnalysisTab') ||
+            (tab === 'lie-detection' && btn.id === 'lieDetectionTab');
+        btn.classList.toggle('active', isActive);
     });
 
-    factCheckResults.classList.toggle('active', tab === 'fact-check');
-    if (keyClaimsResults) {
-        keyClaimsResults.classList.toggle('active', tab === 'key-claims');
+    // Show/hide result panels
+    if (factCheckResults) {
+        factCheckResults.style.display = tab === 'fact-check' ? 'block' : 'none';
     }
-    biasAnalysisResults.classList.toggle('active', tab === 'bias-analysis');
-    lieDetectionResults.classList.toggle('active', tab === 'lie-detection');
+    if (keyClaimsResults) {
+        keyClaimsResults.style.display = tab === 'key-claims' ? 'block' : 'none';
+    }
+    if (biasAnalysisResults) {
+        biasAnalysisResults.style.display = tab === 'bias-analysis' ? 'block' : 'none';
+    }
+    if (lieDetectionResults) {
+        lieDetectionResults.style.display = tab === 'lie-detection' ? 'block' : 'none';
+    }
 }
-
-// Tab click listeners
-factCheckTab.addEventListener('click', () => switchResultTab('fact-check'));
-if (keyClaimsTab) {
-    keyClaimsTab.addEventListener('click', () => switchResultTab('key-claims'));
-}
-biasAnalysisTab.addEventListener('click', () => switchResultTab('bias-analysis'));
-lieDetectionTab.addEventListener('click', () => switchResultTab('lie-detection'));
-
-// Model tab listeners for bias analysis
-modelTabs.forEach(tab => {
-    tab.addEventListener('click', () => {
-        modelTabs.forEach(t => t.classList.remove('active'));
-        tab.classList.add('active');
-
-        const model = tab.dataset.model;
-        document.getElementById('gptAnalysis').classList.toggle('active', model === 'gpt');
-        document.getElementById('claudeAnalysis').classList.toggle('active', model === 'claude');
-        document.getElementById('consensusAnalysis').classList.toggle('active', model === 'consensus');
-    });
-});
 
 // ============================================
 // UTILITY FUNCTIONS

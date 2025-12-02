@@ -1169,7 +1169,7 @@ function createMarkerCard(marker) {
 // RESULT TABS
 // ============================================
 
-ction switchResultTab(tab) {
+function switchResultTab(tab) {
     // Fix: Use correct class selector 'results-tab'
     const tabButtons = document.querySelectorAll('.results-tab');
     tabButtons.forEach(btn => {

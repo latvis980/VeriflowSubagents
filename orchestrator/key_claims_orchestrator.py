@@ -273,7 +273,8 @@ class KeyClaimsOrchestrator:
                 all_scraped_content,
                 facts_for_save,
                 upload_to_r2=save_to_r2,
-                queries_by_fact=all_queries_by_claim
+                queries_by_fact=all_queries_by_claim,
+                content_location=content_location
             )
 
             summary = self._generate_summary(results)
@@ -573,7 +574,8 @@ class KeyClaimsOrchestrator:
                 all_scraped_content,
                 facts_for_save,
                 upload_to_r2=True,
-                queries_by_fact=all_queries_by_claim
+                queries_by_fact=all_queries_by_claim,
+                content_location=content_location
             )
 
             if upload_result and upload_result.get('success'):

@@ -869,20 +869,22 @@ function displayVerificationResults() {
         : 0;
 
     document.getElementById('totalFacts').textContent = totalFacts;
-    document.getElementById('accurateFacts').textContent = accurateFacts;
-    document.getElementById('goodFacts').textContent = goodFacts;
-    document.getElementById('questionableFacts').textContent = questionableFacts;
-    document.getElementById('avgScore').textContent = Math.round(avgScore) + '%';
+    document.getElementById('verifiedCount').textContent = accurateFacts;
+    document.getElementById('partialCount').textContent = goodFacts;
+    document.getElementById('unverifiedCount').textContent = questionableFacts;
 
     document.getElementById('sessionId').textContent = sessionId;
     document.getElementById('processingTime').textContent = Math.round(duration) + 's';
 
-    const auditLink = document.getElementById('auditLink');
-    if (auditUrl) {
-        auditLink.href = auditUrl;
-        auditLink.style.display = 'inline';
+    const r2Link = document.getElementById('r2Link');
+    const r2Sep = document.getElementById('r2Sep');
+    if (auditUrl && r2Link) {
+        r2Link.href = auditUrl;
+        r2Link.style.display = 'inline';
+        if (r2Sep) r2Sep.style.display = 'inline';
     } else {
-        auditLink.style.display = 'none';
+        if (r2Link) r2Link.style.display = 'none';
+        if (r2Sep) r2Sep.style.display = 'none';
     }
 
     factsList.innerHTML = '';

@@ -24,8 +24,8 @@ from utils.file_manager import FileManager
 from utils.logger import fact_logger
 from utils.langsmith_config import langsmith_config
 
-from agents.browserless_scraper import FactCheckScraper
-from agents.llm_fact_extractor import LLMFactExtractor  # ✅ New extractor
+from utils.browserless_scraper import FactCheckScraper
+from agents.llm_fact_extractor import LLMFactExtractor
 from agents.highlighter import Highlighter
 # We'll update the verifier import after creating the updated file
 from utils.job_manager import job_manager

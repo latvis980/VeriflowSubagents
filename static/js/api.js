@@ -201,11 +201,21 @@ async function streamKeyClaimsProgress(jobId) {
 // BIAS ANALYSIS
 // ============================================
 
+// ============================================
+// BIAS ANALYSIS
+// ============================================
+
 async function runBiasCheck(content) {
     try {
         addProgress('📊 Starting bias analysis...');
 
-        const pubName = publicationName.value.trim() || null;
+        // NEW: Get publication URL instead of name
+        const pubUrl = publicationUrl.value.trim() || null;
+
+        // Log if we have a URL to look up
+        if (pubUrl) {
+            addProgress(`📰 Will look up bias data for: ${pubUrl}`);
+        }
 
         const response = await fetch('/api/check-bias', {
             method: 'POST',
@@ -214,7 +224,7 @@ async function runBiasCheck(content) {
             },
             body: JSON.stringify({
                 text: content,
-                publication_name: pubName
+                publication_url: pubUrl  // CHANGED: was publication_name
             })
         });
 
@@ -233,6 +243,13 @@ async function runBiasCheck(content) {
         addProgress(`❌ Bias analysis failed: ${error.message}`, 'error');
         throw error;
     }
+}
+
+async function streamBiasProgress(jobId) {
+    const result = await streamJobProgress(jobId, '📊');
+    AppState.currentBiasResults = result;
+    addProgress('✅ Bias analysis completed');
+    return result;
 }
 
 async function streamBiasProgress(jobId) {

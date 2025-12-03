@@ -31,15 +31,15 @@ from utils.logger import fact_logger
 from utils.langsmith_config import langsmith_config
 from utils.file_manager import FileManager
 from utils.job_manager import job_manager
+from utils.browserless_scraper import FactCheckScraper
+from utils.brave_searcher import BraveSearcher
 
 # Import key claims extractor (new)
 from agents.key_claims_extractor import KeyClaimsExtractor, ContentLocation
 
 # Import existing agents (reuse from web search pipeline)
-from agents.browserless_scraper import FactCheckScraper
 from agents.fact_checker import FactChecker, FactCheckResult
 from agents.query_generator import QueryGenerator
-from agents.brave_searcher import BraveSearcher
 from agents.credibility_filter import CredibilityFilter
 from agents.highlighter import Highlighter
 

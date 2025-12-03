@@ -260,7 +260,7 @@ def check_bias():
             return jsonify({"error": "Invalid request format"}), 400
 
         text = request_json.get('text') or request_json.get('content')
-        publication_name = request_json.get('publication_name')
+        publication_url = request_json.get('publication_url')  # NEW: changed from publication_name
 
         if not text:
             return jsonify({"error": "No text provided"}), 400
@@ -275,7 +275,7 @@ def check_bias():
             "📥 Received bias check request",
             extra={
                 "text_length": len(text),
-                "publication": publication_name
+                "publication_url": publication_url  # NEW
             }
         )
 
@@ -286,7 +286,7 @@ def check_bias():
         # Start background processing
         threading.Thread(
             target=run_bias_task,
-            args=(job_id, text, publication_name),
+            args=(job_id, text, publication_url),  # NEW: pass URL instead of name
             daemon=True
         ).start()
 
@@ -426,24 +426,22 @@ def run_async_task(job_id: str, content: str, input_format: str):
     finally:
         cleanup_thread_loop()
 
-def run_bias_task(job_id: str, text: str, publication_name: Optional[str]):
-    """Background task runner for bias analysis."""
+def run_bias_task(job_id: str, text: str, publication_url: Optional[str] = None):
+    """Background task for bias checking with MBFC lookup"""
     try:
-        if bias_orchestrator is None:  # ← ADD THIS CHECK
-            raise ValueError("Bias orchestrator not initialized")
-        fact_logger.logger.info(f"📊 Job {job_id}: Starting bias analysis")
+        fact_logger.logger.info(f"🔄 Starting bias check job: {job_id}")
 
         result = run_async_in_thread(
-            bias_orchestrator.process_with_progress(text, job_id, publication_name)  # ← Changed
+            bias_orchestrator.process_with_progress(
+                text=text,
+                publication_url=publication_url,  # NEW: pass URL for MBFC lookup
+                job_id=job_id
+            )
         )
 
-        job_manager.complete_job(job_id, result)
-        fact_logger.logger.info(f"✅ Bias job {job_id} completed successfully")
-
     except Exception as e:
-        fact_logger.log_component_error(f"Bias Job {job_id}", e)
+        fact_logger.logger.error(f"❌ Bias check failed: {e}")
         job_manager.fail_job(job_id, str(e))
-
     finally:
         cleanup_thread_loop()
 

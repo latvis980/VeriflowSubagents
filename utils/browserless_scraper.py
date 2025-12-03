@@ -1,4 +1,4 @@
-# agents/browserless_scraper.py
+# utils/browserless_scraper.py
 """
 ✅ FIXED Railway Browserless Scraper with Persistent Sessions & Replica Support
 

@@ -9,7 +9,7 @@ const checkBtn = document.getElementById('checkBtn');
 const clearBtn = document.getElementById('clearBtn');
 const stopBtn = document.getElementById('stopBtn');
 const publicationField = document.getElementById('publicationField');
-const publicationName = document.getElementById('publicationName');
+const publicationUrl = document.getElementById('publicationUrl');
 
 const statusSection = document.getElementById('statusSection');
 const resultsSection = document.getElementById('resultsSection');

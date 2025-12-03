@@ -18,9 +18,9 @@ from utils.html_parser import HTMLParser
 from utils.file_manager import FileManager
 from utils.logger import fact_logger
 from utils.langsmith_config import langsmith_config
+from utils.browserless_scraper import FactCheckScraper
 
 # Import your existing components
-from agents.browserless_scraper import FactCheckScraper
 from agents.fact_checker import FactChecker
 
 # Import the improved analyzer

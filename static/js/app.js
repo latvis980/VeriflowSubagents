@@ -183,7 +183,7 @@ function initEventListeners() {
     // Clear button
     clearBtn.addEventListener('click', () => {
         htmlInput.value = '';
-        publicationName.value = '';
+        publicationUrl.value = '';  // NEW
         hideContentFormatIndicator();
         hideAllSections();
         AppState.clearResults();
@@ -201,7 +201,7 @@ function initEventListeners() {
     newCheckBtn.addEventListener('click', () => {
         hideAllSections();
         htmlInput.value = '';
-        publicationName.value = '';
+        publicationUrl.value = '';  // NEW: was publicationName
         hideContentFormatIndicator();
         AppState.clearResults();
     });

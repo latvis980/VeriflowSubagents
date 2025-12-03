@@ -186,11 +186,15 @@
                     <span id="formatMessage">Detected source links</span>
                 </div>
 
-                <!-- Publication Name Field (for bias analysis) -->
+                <!-- Publication URL Field (for bias analysis with MBFC lookup) -->
                 <div id="publicationField" class="publication-field" style="display: none;">
-                    <label for="publicationName">Publication Name (Optional)</label>
-                    <input type="text" id="publicationName" placeholder="e.g., The New York Times">
-                    <span class="help-text">Helps provide context for known publication biases</span>
+                    <label for="publicationUrl">Publication URL (Optional)</label>
+                    <input 
+                        type="text" 
+                        id="publicationUrl" 
+                        placeholder="e.g., cnn.com, foxnews.com, nytimes.com"
+                    >
+                    <p class="input-help">Enter the publication's domain - we'll look up bias data from Media Bias/Fact Check</p>
                 </div>
 
                 <div class="input-actions">

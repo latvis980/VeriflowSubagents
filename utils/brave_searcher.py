@@ -1,4 +1,4 @@
-# agents/brave_searcher.py
+# utils/brave_searcher.py
 """
 Brave Search Agent
 Executes web searches using Brave Search API for fact verification

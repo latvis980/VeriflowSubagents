@@ -129,10 +129,6 @@ class BiasCheckOrchestrator:
                 fact_logger.logger.info(f"📰 Step 0: Looking up publication on MBFC: {publication_url}")
 
                 try:
-                    # Ensure scraper session is active
-                    if self.scraper:
-                        await self.scraper.ensure_session()
-
                     publication_profile = await self.pub_detector.detect_publication_async(
                         publication_url=publication_url
                     )

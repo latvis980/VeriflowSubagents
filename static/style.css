@@ -1990,3 +1990,342 @@ footer a:hover {
 }
 
 */
+
+/* ==============================================
+   ADDITIONAL CSS FOR BIAS ANALYSIS & LIE DETECTION
+   Add these styles to the END of your style.css
+   ============================================== */
+
+/* Consensus Summary Card */
+.bias-consensus-card {
+    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+    border: 1px solid #bae6fd;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.bias-consensus-card h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    color: var(--text-primary);
+}
+
+.consensus-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+}
+
+.consensus-item {
+    text-align: center;
+    padding: 1rem;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.consensus-label {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+}
+
+.consensus-value {
+    display: block;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--primary-color);
+}
+
+/* Model Analysis Tabs */
+.model-analysis {
+    display: none;
+}
+
+.model-analysis.active {
+    display: block;
+}
+
+/* Detailed Analysis Sections */
+.model-detailed-analysis {
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.model-detailed-analysis h4 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 1rem 0 0.5rem 0;
+}
+
+.model-detailed-analysis h4:first-child {
+    margin-top: 0;
+}
+
+.assessment-text,
+.language-text {
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    padding: 0.75rem;
+    background: var(--bg-color);
+    border-radius: 8px;
+}
+
+/* Consensus Details */
+.consensus-details {
+    padding: 1rem 0;
+}
+
+.consensus-section {
+    margin-bottom: 1.5rem;
+}
+
+.consensus-section:last-child {
+    margin-bottom: 0;
+}
+
+.consensus-section h4 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.75rem;
+}
+
+.agreement-list,
+.disagreement-list,
+.recommendations-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.agreement-list li,
+.disagreement-list li,
+.recommendations-list li {
+    padding: 0.5rem 0.75rem;
+    background: var(--bg-color);
+    border-radius: 6px;
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+}
+
+.agreement-list li {
+    border-left: 3px solid var(--success-color);
+}
+
+.disagreement-list li {
+    border-left: 3px solid var(--warning-color);
+}
+
+.recommendations-list li {
+    border-left: 3px solid var(--primary-color);
+}
+
+.final-assessment-text {
+    font-size: 0.95rem;
+    color: var(--text-primary);
+    line-height: 1.6;
+    padding: 1rem;
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    border-radius: 8px;
+    border: 1px solid #f59e0b;
+}
+
+/* Lie Detection Analysis Cards */
+.analysis-card {
+    background: var(--card-bg);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    box-shadow: var(--shadow-sm);
+}
+
+.analysis-card h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 1rem;
+}
+
+.analysis-card .assessment-text,
+.analysis-card .conclusion-text {
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+}
+
+/* Markers List */
+.markers-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.marker-card {
+    background: var(--bg-color);
+    border-radius: 8px;
+    padding: 1rem;
+    border-left: 4px solid var(--warning-color);
+}
+
+.marker-card.severity-low {
+    border-left-color: var(--success-color);
+}
+
+.marker-card.severity-medium {
+    border-left-color: var(--warning-color);
+}
+
+.marker-card.severity-high {
+    border-left-color: var(--danger-color);
+}
+
+.marker-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.marker-header h4 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.severity-badge {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    text-transform: uppercase;
+    background: var(--warning-color);
+    color: white;
+}
+
+.marker-explanation {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.75rem;
+}
+
+.marker-examples {
+    font-size: 0.85rem;
+}
+
+.marker-examples strong {
+    color: var(--text-primary);
+}
+
+.marker-examples ul {
+    margin: 0.5rem 0 0 1.5rem;
+    padding: 0;
+}
+
+.marker-examples li {
+    color: var(--text-secondary);
+    margin-bottom: 0.25rem;
+}
+
+/* Positive Indicators */
+.positive-indicators {
+    padding: 0;
+}
+
+.positive-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.positive-list li {
+    padding: 0.5rem 0.75rem;
+    background: #ecfdf5;
+    border-left: 3px solid var(--success-color);
+    border-radius: 0 6px 6px 0;
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+    color: #065f46;
+}
+
+/* Detailed Reasoning Accordion */
+.detailed-reasoning {
+    background: var(--card-bg);
+    border-radius: 12px;
+    margin-bottom: 1rem;
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+}
+
+.detailed-reasoning summary {
+    padding: 1rem 1.5rem;
+    font-weight: 600;
+    cursor: pointer;
+    background: var(--bg-color);
+    border: none;
+    font-size: 0.95rem;
+    color: var(--text-primary);
+}
+
+.detailed-reasoning summary:hover {
+    background: #e2e8f0;
+}
+
+.detailed-reasoning .reasoning-text {
+    padding: 1.5rem;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    line-height: 1.7;
+    border-top: 1px solid var(--border-color);
+}
+
+/* No Markers Message */
+.no-markers {
+    padding: 1rem;
+    text-align: center;
+    color: var(--success-color);
+    font-weight: 500;
+}
+
+/* Results Tab Styling Fix */
+.results-tab {
+    padding: 0.75rem 1.5rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    background: none;
+    border: none;
+    border-bottom: 3px solid transparent;
+    cursor: pointer;
+    color: var(--text-secondary);
+    transition: all 0.2s;
+    margin-bottom: -2px;
+}
+
+.results-tab:hover {
+    color: var(--primary-color);
+}
+
+.results-tab.active {
+    color: var(--primary-color);
+    border-bottom-color: var(--primary-color);
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+    .consensus-summary-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .lie-detection-summary {
+        grid-template-columns: 1fr;
+    }
+}

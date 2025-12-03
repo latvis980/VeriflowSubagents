@@ -25,7 +25,7 @@
                     </button>
                     <button class="mode-tab" data-mode="text-factcheck">
                         <span class="mode-icon">🔍</span>
-                        <span class="mode-label">Full Fact-Check (alfa)</span>
+                        <span class="mode-label">Full Fact-Check</span>
                         <span class="mode-desc">Verify all claims via web</span>
                     </button>
                     <button class="mode-tab" data-mode="key-claims">
@@ -34,249 +34,237 @@
                         <span class="mode-desc">Verify 2-3 main arguments</span>
                     </button>
                     <button class="mode-tab" data-mode="bias-analysis">
-                        <span class="mode-icon">📊</span>
+                        <span class="mode-icon">⚖️</span>
                         <span class="mode-label">Bias Analysis</span>
-                        <span class="mode-desc">Detect political bias</span>
+                        <span class="mode-desc">Detect political/ideological bias</span>
                     </button>
                     <button class="mode-tab" data-mode="lie-detection">
                         <span class="mode-icon">🕵️</span>
                         <span class="mode-label">Lie Detection</span>
-                        <span class="mode-desc">Deception markers</span>
+                        <span class="mode-desc">Find deception markers</span>
                     </button>
+                </div>
+            </section>
+
+            <!-- Mode Instructions -->
+            <section class="mode-instructions">
+                <!-- LLM Output Instructions -->
+                <div id="llmOutputInstructions" class="instructions-card">
+                    <h3>🤖 LLM Output Verification</h3>
+                    <p>Verify that AI-generated content accurately interprets its cited sources.</p>
+                    <div class="instructions-steps">
+                        <div class="step">
+                            <span class="step-number">1</span>
+                            <span class="step-text">Copy output from <strong>ChatGPT</strong>, <strong>Perplexity</strong>, or other AI</span>
+                        </div>
+                        <div class="step">
+                            <span class="step-number">2</span>
+                            <span class="step-text">Paste below (include all source links)</span>
+                        </div>
+                        <div class="step">
+                            <span class="step-number">3</span>
+                            <span class="step-text">We'll check if claims match the cited sources</span>
+                        </div>
+                    </div>
+                    <div class="instructions-note">
+                        <span class="note-icon">💡</span>
+                        <span>Use <kbd>Ctrl+A</kbd> to select all, then <kbd>Ctrl+C</kbd> to copy the entire response</span>
+                    </div>
+                </div>
+
+                <!-- Text Fact-Check Instructions -->
+                <div id="textFactcheckInstructions" class="instructions-card" style="display: none;">
+                    <h3>🔍 Web Search Fact-Check</h3>
+                    <p>Verify any text by searching the web for supporting evidence.</p>
+                    <div class="instructions-steps">
+                        <div class="step">
+                            <span class="step-number">1</span>
+                            <span class="step-text">Paste any text - articles, social media posts, claims</span>
+                        </div>
+                        <div class="step">
+                            <span class="step-number">2</span>
+                            <span class="step-text">We extract factual claims automatically</span>
+                        </div>
+                        <div class="step">
+                            <span class="step-number">3</span>
+                            <span class="step-text">Each claim is verified via web search</span>
+                        </div>
+                    </div>
+                    <div class="instructions-note">
+                        <span class="note-icon">⚠️</span>
+                        <span>This mode may take longer as it searches the web for each claim</span>
+                    </div>
+                </div>
+
+                <!-- Key Claims Instructions -->
+                <div id="keyClaimsInstructions" class="instructions-card" style="display: none;">
+                    <h3>🎯 Key Claims Analysis</h3>
+                    <p>Extract and verify the 2-3 most important claims in any text.</p>
+                    <div class="instructions-steps">
+                        <div class="step">
+                            <span class="step-number">1</span>
+                            <span class="step-text">Paste any text - articles, essays, arguments</span>
+                        </div>
+                        <div class="step">
+                            <span class="step-number">2</span>
+                            <span class="step-text">AI identifies the central thesis and key arguments</span>
+                        </div>
+                        <div class="step">
+                            <span class="step-number">3</span>
+                            <span class="step-text">Each key claim is thoroughly verified</span>
+                        </div>
+                    </div>
+                    <div class="instructions-note">
+                        <span class="note-icon">💡</span>
+                        <span>Best for long-form content where you want to verify the main points</span>
+                    </div>
+                </div>
+
+                <!-- Bias Analysis Instructions -->
+                <div id="biasAnalysisInstructions" class="instructions-card" style="display: none;">
+                    <h3>⚖️ Bias Analysis</h3>
+                    <p>Analyze text for political, ideological, or perspective bias using dual AI models.</p>
+                    <div class="instructions-steps">
+                        <div class="step">
+                            <span class="step-number">1</span>
+                            <span class="step-text">Paste news articles, op-eds, or any content</span>
+                        </div>
+                        <div class="step">
+                            <span class="step-number">2</span>
+                            <span class="step-text">GPT-4o and Claude analyze independently</span>
+                        </div>
+                        <div class="step">
+                            <span class="step-number">3</span>
+                            <span class="step-text">Get consensus score and detailed breakdown</span>
+                        </div>
+                    </div>
+                    <div class="instructions-note">
+                        <span class="note-icon">💡</span>
+                        <span>Optionally add the publication name for context on known biases</span>
+                    </div>
+                </div>
+
+                <!-- Lie Detection Instructions -->
+                <div id="lieDetectionInstructions" class="instructions-card" style="display: none;">
+                    <h3>🕵️ Lie Detection</h3>
+                    <p>Analyze text for linguistic markers commonly associated with deception.</p>
+                    <div class="instructions-steps">
+                        <div class="step">
+                            <span class="step-number">1</span>
+                            <span class="step-text">Paste any text - interviews, statements, articles</span>
+                        </div>
+                        <div class="step">
+                            <span class="step-number">2</span>
+                            <span class="step-text">AI analyzes for deception markers</span>
+                        </div>
+                        <div class="step">
+                            <span class="step-number">3</span>
+                            <span class="step-text">Get risk assessment and detailed explanation</span>
+                        </div>
+                    </div>
+                    <div class="instructions-note">
+                        <span class="note-icon">⚠️</span>
+                        <span>This is linguistic analysis only - not a definitive truth detector</span>
+                    </div>
                 </div>
             </section>
 
             <!-- Input Section -->
             <section class="input-section">
-                <!-- LLM Output Mode Instructions -->
-                <div id="llmOutputInstructions" class="mode-instructions">
-                    <div class="instructions-card">
-                        <h3>📋 How to Copy LLM Output</h3>
-                        <div class="instructions-steps">
-                            <div class="step">
-                                <span class="step-number">1</span>
-                                <span class="step-text">Go to <strong>ChatGPT</strong>, <strong>Perplexity</strong>, or any LLM chat</span>
-                            </div>
-                            <div class="step">
-                                <span class="step-number">2</span>
-                                <span class="step-text">Ask a question and get a response with <strong>source citations/links</strong></span>
-                            </div>
-                            <div class="step">
-                                <span class="step-number">3</span>
-                                <span class="step-text">Select and copy the entire response (with links)</span>
-                            </div>
-                            <div class="step">
-                                <span class="step-number">4</span>
-                                <span class="step-text">Paste it below and click <strong>Analyze</strong></span>
-                            </div>
-                        </div>
-                        <div class="instructions-note">
-                            <span class="note-icon">💡</span>
-                            <span>Works with HTML, Markdown, or plain text containing URLs</span>
-                        </div>
-                    </div>
+                <div class="section-header">
+                    <h2 id="inputSectionTitle">Paste LLM Output with Sources</h2>
+                    <p class="help-text" id="inputHelpText">Paste ChatGPT, Perplexity, or any LLM output with source links</p>
                 </div>
 
-                <!-- Text Fact-Check Mode Instructions -->
-                <div id="textFactcheckInstructions" class="mode-instructions" style="display: none;">
-                    <div class="instructions-card">
-                        <h3>🔍 How Full Fact-Checking Works</h3>
-                        <p>This mode extracts <strong>all verifiable facts</strong> and checks each one against web sources.</p>
-                        <div class="instructions-steps">
-                            <div class="step">
-                                <span class="step-number">1</span>
-                                <span class="step-text">Paste any article or text</span>
-                            </div>
-                            <div class="step">
-                                <span class="step-number">2</span>
-                                <span class="step-text">We extract <strong>all factual claims</strong> (dates, stats, names, etc.)</span>
-                            </div>
-                            <div class="step">
-                                <span class="step-number">3</span>
-                                <span class="step-text">Each fact is verified via web search</span>
-                            </div>
-                        </div>
-                        <div class="instructions-note">
-                            <span class="note-icon">⏱️</span>
-                            <span>May take longer for content with many facts. Use <strong>Key Claims</strong> mode for faster analysis.</span>
-                        </div>
-                    </div>
+                <div class="input-wrapper">
+                    <textarea id="htmlInput" placeholder="Paste content here..." rows="12"></textarea>
                 </div>
 
-                <!-- Key Claims Mode Instructions -->
-                <div id="keyClaimsInstructions" class="mode-instructions" style="display: none;">
-                    <div class="instructions-card instructions-card-keyclaims">
-                        <h3>🎯 Key Claims Analysis</h3>
-                        <p>This mode identifies the <strong>2-3 central thesis statements</strong> and verifies them thoroughly.</p>
-                        <div class="instructions-steps">
-                            <div class="step">
-                                <span class="step-number">1</span>
-                                <span class="step-text">Paste any article or text</span>
-                            </div>
-                            <div class="step">
-                                <span class="step-number">2</span>
-                                <span class="step-text">We identify the <strong>main arguments</strong> (not supporting details)</span>
-                            </div>
-                            <div class="step">
-                                <span class="step-number">3</span>
-                                <span class="step-text">Each key claim gets <strong>thorough verification</strong></span>
-                            </div>
-                        </div>
-                        <div class="instructions-note">
-                            <span class="note-icon">💡</span>
-                            <span>Best for: "Is the main point of this article true?" — Faster than full fact-check.</span>
-                        </div>
-                    </div>
+                <!-- Content Format Indicator -->
+                <div id="contentFormatIndicator" class="content-format-indicator" style="display: none;">
+                    <span id="formatIcon">✅</span>
+                    <span id="formatMessage">Detected source links</span>
                 </div>
 
-                <!-- Bias Analysis Mode Instructions -->
-                <div id="biasAnalysisInstructions" class="mode-instructions" style="display: none;">
-                    <div class="instructions-card">
-                        <h3>📊 How Bias Analysis Works</h3>
-                        <p>Detects political and ideological bias in news articles and opinion pieces.</p>
-                        <div class="instructions-steps">
-                            <div class="step">
-                                <span class="step-number">1</span>
-                                <span class="step-text">Paste a news article, op-ed, or any content</span>
-                            </div>
-                            <div class="step">
-                                <span class="step-number">2</span>
-                                <span class="step-text">Optionally enter the publication name for context</span>
-                            </div>
-                            <div class="step">
-                                <span class="step-number">3</span>
-                                <span class="step-text">Get a detailed bias report with specific examples</span>
-                            </div>
-                        </div>
-                        <div class="instructions-note">
-                            <span class="note-icon">⚖️</span>
-                            <span>Works best with news articles, opinion pieces, and political content</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Lie Detection Mode Instructions -->
-                <div id="lieDetectionInstructions" class="mode-instructions" style="display: none;">
-                    <div class="instructions-card">
-                        <h3>🕵️ How Lie Detection Works</h3>
-                        <p>Analyzes text for linguistic markers commonly associated with deception.</p>
-                        <div class="instructions-steps">
-                            <div class="step">
-                                <span class="step-number">1</span>
-                                <span class="step-text">Paste any article, statement, or text</span>
-                            </div>
-                            <div class="step">
-                                <span class="step-number">2</span>
-                                <span class="step-text">AI analyzes linguistic patterns and markers</span>
-                            </div>
-                            <div class="step">
-                                <span class="step-number">3</span>
-                                <span class="step-text">Get deception risk score with specific examples</span>
-                            </div>
-                        </div>
-                        <div class="instructions-note">
-                            <span class="note-icon">⚠️</span>
-                            <span>This is probabilistic analysis, not definitive proof of deception</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Input Group -->
-                <div class="input-group">
-                    <label id="inputSectionTitle">Paste LLM Output with Sources</label>
-                    <p class="input-help" id="inputHelpText">Paste ChatGPT, Perplexity, or any LLM output with source links</p>
-                    <textarea 
-                        id="htmlInput" 
-                        placeholder="Paste your content here..."
-                        rows="20"
-                    ></textarea>
-                    <div id="contentFormatIndicator" class="content-format-indicator" style="display: none;">
-                        <span class="format-icon" id="formatIcon">✅</span>
-                        <span class="format-message" id="formatMessage">Format detected</span>
-                    </div>
-                </div>
-
-                <!-- Optional: Publication Name (only for bias analysis) -->
-                <div class="input-group" id="publicationField" style="display: none;">
+                <!-- Publication Name Field (for bias analysis) -->
+                <div id="publicationField" class="publication-field" style="display: none;">
                     <label for="publicationName">Publication Name (Optional)</label>
-                    <input 
-                        type="text" 
-                        id="publicationName" 
-                        placeholder="e.g., The New York Times, Fox News, CNN"
-                    >
-                    <p class="input-help">Helps provide context for known publication biases</p>
+                    <input type="text" id="publicationName" placeholder="e.g., The New York Times">
+                    <span class="help-text">Helps provide context for known publication biases</span>
                 </div>
 
-                <!-- Action Buttons -->
                 <div class="input-actions">
                     <button id="checkBtn" class="btn-primary">
-                        <span class="btn-icon">🚀</span>
-                        Analyze
+                        <span class="btn-icon">🔬</span> Analyze
                     </button>
                     <button id="clearBtn" class="btn-secondary">
-                        <span class="btn-icon">🗑️</span>
-                        Clear
-                    </button>
-                    <button id="stopBtn" class="btn-stop" style="display: none;" disabled>
-                        <span class="btn-icon">⏹️</span>
-                        Stop
+                        <span class="btn-icon">🗑️</span> Clear
                     </button>
                 </div>
             </section>
 
-            <!-- Plain Text Modal (for suggesting mode switch) -->
+            <!-- Plain Text Modal -->
             <div id="plainTextModal" class="modal" style="display: none;">
                 <div class="modal-content-improved">
-                    <button id="closeModal" class="modal-close-btn" aria-label="Close">×</button>
-
+                    <button class="modal-close-btn" id="closeModal">&times;</button>
+                    
                     <div class="modal-header">
                         <div class="modal-icon-warning">⚠️</div>
                         <h3>No Source Links Detected</h3>
-                        <p>This content appears to be plain text without source links.</p>
+                        <p>This content doesn't appear to have any source links for LLM verification.</p>
                     </div>
-
+                    
+                    <div class="modal-divider"></div>
+                    
                     <div class="modal-body">
-                        <p class="modal-subtitle">Choose an analysis mode:</p>
-
-                        <div class="modal-options">
-                            <button id="switchToKeyClaimsMode" class="option-card option-card-keyclaims">
-                                <span class="option-card-icon">🎯</span>
-                                <div class="option-card-content">
-                                    <h4>Key Claims (Recommended)</h4>
-                                    <p>Verify 2-3 main arguments — fast &amp; focused</p>
-                                </div>
-                            </button>
-
-                            <button id="switchToTextMode" class="option-card">
+                        <p class="modal-subtitle">Choose how to proceed:</p>
+                        
+                        <div class="modal-options-grid">
+                            <button class="option-card option-factcheck" id="switchToTextMode">
                                 <span class="option-card-icon">🔍</span>
                                 <div class="option-card-content">
                                     <h4>Full Fact-Check</h4>
                                     <p>Verify all claims via web search</p>
                                 </div>
+                                <span class="option-card-arrow">→</span>
                             </button>
-
-                            <button id="switchToBiasMode" class="option-card">
-                                <span class="option-card-icon">📊</span>
+                            
+                            <button class="option-card option-keyclaims" id="switchToKeyClaimsMode">
+                                <span class="option-card-icon">🎯</span>
+                                <div class="option-card-content">
+                                    <h4>Key Claims Only</h4>
+                                    <p>Verify the 2-3 main arguments</p>
+                                </div>
+                                <span class="option-card-arrow">→</span>
+                            </button>
+                            
+                            <button class="option-card option-bias" id="switchToBiasMode">
+                                <span class="option-card-icon">⚖️</span>
                                 <div class="option-card-content">
                                     <h4>Bias Analysis</h4>
                                     <p>Check for political/ideological bias</p>
                                 </div>
+                                <span class="option-card-arrow">→</span>
                             </button>
-
-                            <button id="switchToLieMode" class="option-card">
+                            
+                            <button class="option-card option-lie" id="switchToLieMode">
                                 <span class="option-card-icon">🕵️</span>
                                 <div class="option-card-content">
                                     <h4>Lie Detection</h4>
-                                    <p>Analyze deception markers</p>
+                                    <p>Analyze for deception markers</p>
                                 </div>
+                                <span class="option-card-arrow">→</span>
+                            </button>
+                            
+                            <button class="option-card option-continue" id="continueAnyway">
+                                <span class="option-card-icon">⏩</span>
+                                <div class="option-card-content">
+                                    <h4>Continue Anyway</h4>
+                                    <p>Try LLM verification regardless</p>
+                                </div>
+                                <span class="option-card-arrow">→</span>
                             </button>
                         </div>
-                    </div>
-
-                    <div class="modal-footer-improved">
-                        <button id="continueAnyway" class="btn-text-link">
-                            Continue with LLM mode anyway →
-                        </button>
                     </div>
                 </div>
             </div>
@@ -286,33 +274,32 @@
                 <div class="status-card">
                     <div class="status-header">
                         <div class="spinner"></div>
-                        <span class="status-text">Analyzing content...</span>
+                        <h2>Analyzing Content...</h2>
                     </div>
-                    <div class="progress-container">
-                        <div id="progressLog" class="progress-log"></div>
+                    <div id="progressLog" class="progress-log"></div>
+                    <div class="status-actions">
+                        <button id="stopBtn" class="btn-danger" style="display: none;">
+                            <span class="btn-icon">⏹️</span> Stop
+                        </button>
                     </div>
                 </div>
             </section>
 
             <!-- Results Section -->
             <section id="resultsSection" class="results-section" style="display: none;">
-                <!-- Results Tabs -->
+                <!-- Result Tabs -->
                 <div class="results-tabs">
-                    <button id="factCheckTab" class="results-tab active">
-                        <span class="tab-icon">✅</span>
-                        <span class="tab-label">Verification Results</span>
+                    <button id="factCheckTab" class="results-tab active" data-tab="fact-check">
+                        📋 Fact Check
                     </button>
-                    <button id="keyClaimsTab" class="results-tab" style="display: none;">
-                        <span class="tab-icon">🎯</span>
-                        <span class="tab-label">Key Claims</span>
+                    <button id="keyClaimsTab" class="results-tab" data-tab="key-claims" style="display: none;">
+                        🎯 Key Claims
                     </button>
-                    <button id="biasAnalysisTab" class="results-tab" style="display: none;">
-                        <span class="tab-icon">📊</span>
-                        <span class="tab-label">Bias Analysis</span>
+                    <button id="biasAnalysisTab" class="results-tab" data-tab="bias-analysis" style="display: none;">
+                        ⚖️ Bias Analysis
                     </button>
-                    <button id="lieDetectionTab" class="results-tab" style="display: none;">
-                        <span class="tab-icon">🕵️</span>
-                        <span class="tab-label">Lie Detection</span>
+                    <button id="lieDetectionTab" class="results-tab" data-tab="lie-detection" style="display: none;">
+                        🕵️ Lie Detection
                     </button>
                 </div>
 
@@ -358,8 +345,8 @@
 
                 <!-- Key Claims Results -->
                 <div id="keyClaimsResults" class="results-content" style="display: none;">
-                    <div class="summary-card summary-card-keyclaims">
-                        <h3>🎯 Key Claims Analysis</h3>
+                    <div class="summary-card">
+                        <h3>Key Claims Summary</h3>
                         <div class="summary-grid">
                             <div class="summary-item">
                                 <span class="summary-value" id="kcTotalClaims">0</span>
@@ -378,76 +365,154 @@
                                 <span class="summary-label">Unverified</span>
                             </div>
                         </div>
-                        <div class="overall-credibility">
-                            <span class="credibility-label">Overall Assessment:</span>
-                            <span class="credibility-value" id="kcOverallCredibility">-</span>
+                        <div class="credibility-bar">
+                            <span class="credibility-label">Overall Credibility:</span>
+                            <div class="credibility-track">
+                                <div id="kcCredibilityFill" class="credibility-fill" style="width: 0%;"></div>
+                            </div>
+                            <span id="kcCredibilityValue" class="credibility-value">0%</span>
                         </div>
                     </div>
 
-                    <h3>Key Claims Verification</h3>
-                    <div id="keyClaimsList" class="facts-list"></div>
+                    <h3>Key Claims Analysis</h3>
+                    <div id="keyClaimsList" class="claims-list"></div>
 
                     <div class="session-info">
                         Session ID: <code id="kcSessionId">-</code>
                         <span class="separator">•</span>
                         Processing Time: <span id="kcProcessingTime">0s</span>
-                        <span class="separator" id="kcR2Sep" style="display: none;">•</span>
-                        <a href="#" id="kcR2Link" target="_blank" style="display: none;">📄 View Full Report</a>
                     </div>
                 </div>
 
                 <!-- Bias Analysis Results -->
                 <div id="biasAnalysisResults" class="results-content" style="display: none;">
-                    <!-- Bias results content here - keep existing -->
+                    <!-- Consensus Summary -->
+                    <div class="bias-consensus-card">
+                        <h3>📊 Consensus Analysis</h3>
+                        <div class="consensus-summary-grid">
+                            <div class="consensus-item">
+                                <span class="consensus-label">Bias Score</span>
+                                <span class="consensus-value" id="consensusBiasScore">-</span>
+                            </div>
+                            <div class="consensus-item">
+                                <span class="consensus-label">Direction</span>
+                                <span class="consensus-value" id="consensusBiasDirection">-</span>
+                            </div>
+                            <div class="consensus-item">
+                                <span class="consensus-label">Confidence</span>
+                                <span class="consensus-value" id="biasConfidence">-</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Model Comparison -->
                     <div class="bias-summary-card">
-                        <h3>📊 Bias Analysis Summary</h3>
+                        <h3>📊 Model Analysis Comparison</h3>
                         <div class="model-tabs">
                             <button class="model-tab active" data-model="gpt">GPT-4o</button>
                             <button class="model-tab" data-model="claude">Claude</button>
+                            <button class="model-tab" data-model="consensus">Consensus</button>
                         </div>
-                        <div id="gptBiasResults" class="model-results active">
-                            <div class="bias-meter">
-                                <div class="bias-spectrum">
-                                    <span class="spectrum-label left">Far Left</span>
-                                    <div class="spectrum-bar">
-                                        <div id="gptBiasIndicator" class="bias-indicator" style="left: 50%;"></div>
+                        
+                        <!-- GPT Analysis -->
+                        <div id="gptAnalysis" class="model-analysis active">
+                            <div id="gptBiasResults" class="model-results">
+                                <div class="bias-meter">
+                                    <div class="bias-spectrum">
+                                        <span class="spectrum-label left">Far Left</span>
+                                        <div class="spectrum-bar">
+                                            <div id="gptBiasIndicator" class="bias-indicator" style="left: 50%;"></div>
+                                        </div>
+                                        <span class="spectrum-label right">Far Right</span>
                                     </div>
-                                    <span class="spectrum-label right">Far Right</span>
+                                    <div class="bias-label" id="gptBiasLabel">Center</div>
                                 </div>
-                                <div class="bias-label" id="gptBiasLabel">Center</div>
+                                <div class="bias-details">
+                                    <div class="bias-score">
+                                        <span class="score-label">Bias Score:</span>
+                                        <span class="score-value" id="gptBiasScore">0</span>
+                                        <span class="score-scale">(-10 to +10)</span>
+                                    </div>
+                                    <div class="confidence-score">
+                                        <span class="score-label">Confidence:</span>
+                                        <span class="score-value" id="gptConfidence">0%</span>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="bias-details">
-                                <div class="bias-score">
-                                    <span class="score-label">Bias Score:</span>
-                                    <span class="score-value" id="gptBiasScore">0</span>
-                                    <span class="score-scale">(-10 to +10)</span>
-                                </div>
-                                <div class="confidence-score">
-                                    <span class="score-label">Confidence:</span>
-                                    <span class="score-value" id="gptConfidence">0%</span>
-                                </div>
+                            
+                            <!-- GPT Detailed Analysis -->
+                            <div class="model-detailed-analysis">
+                                <h4>Overall Assessment</h4>
+                                <p id="gptOverallAssessment" class="assessment-text">-</p>
+                                
+                                <h4>Bias Indicators Detected</h4>
+                                <ul id="gptBiasIndicators" class="bias-indicators-list"></ul>
+                                
+                                <h4>Language Analysis</h4>
+                                <p id="gptLanguageAnalysis" class="language-text">-</p>
                             </div>
                         </div>
-                        <div id="claudeBiasResults" class="model-results" style="display: none;">
-                            <div class="bias-meter">
-                                <div class="bias-spectrum">
-                                    <span class="spectrum-label left">Far Left</span>
-                                    <div class="spectrum-bar">
-                                        <div id="claudeBiasIndicator" class="bias-indicator" style="left: 50%;"></div>
+                        
+                        <!-- Claude Analysis -->
+                        <div id="claudeAnalysis" class="model-analysis" style="display: none;">
+                            <div id="claudeBiasResults" class="model-results">
+                                <div class="bias-meter">
+                                    <div class="bias-spectrum">
+                                        <span class="spectrum-label left">Far Left</span>
+                                        <div class="spectrum-bar">
+                                            <div id="claudeBiasIndicator" class="bias-indicator" style="left: 50%;"></div>
+                                        </div>
+                                        <span class="spectrum-label right">Far Right</span>
                                     </div>
-                                    <span class="spectrum-label right">Far Right</span>
+                                    <div class="bias-label" id="claudeBiasLabel">Center</div>
                                 </div>
-                                <div class="bias-label" id="claudeBiasLabel">Center</div>
+                                <div class="bias-details">
+                                    <div class="bias-score">
+                                        <span class="score-label">Bias Score:</span>
+                                        <span class="score-value" id="claudeBiasScore">0</span>
+                                        <span class="score-scale">(-10 to +10)</span>
+                                    </div>
+                                    <div class="confidence-score">
+                                        <span class="score-label">Confidence:</span>
+                                        <span class="score-value" id="claudeConfidence">0%</span>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="bias-details">
-                                <div class="bias-score">
-                                    <span class="score-label">Bias Score:</span>
-                                    <span class="score-value" id="claudeBiasScore">0</span>
-                                    <span class="score-scale">(-10 to +10)</span>
+                            
+                            <!-- Claude Detailed Analysis -->
+                            <div class="model-detailed-analysis">
+                                <h4>Overall Assessment</h4>
+                                <p id="claudeOverallAssessment" class="assessment-text">-</p>
+                                
+                                <h4>Bias Indicators Detected</h4>
+                                <ul id="claudeBiasIndicators" class="bias-indicators-list"></ul>
+                                
+                                <h4>Language Analysis</h4>
+                                <p id="claudeLanguageAnalysis" class="language-text">-</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Consensus Analysis -->
+                        <div id="consensusAnalysis" class="model-analysis" style="display: none;">
+                            <div class="consensus-details">
+                                <div class="consensus-section">
+                                    <h4>✅ Areas of Agreement</h4>
+                                    <ul id="areasOfAgreement" class="agreement-list"></ul>
                                 </div>
-                                <div class="confidence-score">
-                                    <span class="score-label">Confidence:</span>
-                                    <span class="score-value" id="claudeConfidence">0%</span>
+                                
+                                <div class="consensus-section">
+                                    <h4>⚠️ Areas of Disagreement</h4>
+                                    <ul id="areasOfDisagreement" class="disagreement-list"></ul>
+                                </div>
+                                
+                                <div class="consensus-section">
+                                    <h4>🎯 Final Assessment</h4>
+                                    <p id="finalAssessment" class="final-assessment-text">-</p>
+                                </div>
+                                
+                                <div class="consensus-section">
+                                    <h4>💡 Recommendations</h4>
+                                    <ul id="recommendations" class="recommendations-list"></ul>
                                 </div>
                             </div>
                         </div>
@@ -471,8 +536,8 @@
                         <div class="lie-summary-card risk-card">
                             <h3>⚠️ Deception Risk</h3>
                             <div class="risk-meter">
-                                <span class="risk-value" id="lieRiskScore">0%</span>
-                                <span class="risk-label" id="lieRiskLabel">Low Risk</span>
+                                <span class="risk-value" id="lieRiskLevel">-</span>
+                                <span class="risk-label" id="lieRiskLabel">Unknown</span>
                             </div>
                         </div>
                         <div class="lie-summary-card credibility-card">
@@ -485,8 +550,13 @@
                     </div>
 
                     <div class="analysis-card">
+                        <h3>📋 Overall Assessment</h3>
+                        <p id="lieOverallAssessment" class="assessment-text">-</p>
+                    </div>
+
+                    <div class="analysis-card">
                         <h3>🚩 Deception Markers Found</h3>
-                        <div id="lieMarkersList" class="markers-list"></div>
+                        <div id="lieMarkersContainer" class="markers-list"></div>
                     </div>
 
                     <div class="analysis-card">

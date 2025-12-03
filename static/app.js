@@ -763,16 +763,18 @@ function displayKeyClaimsResults() {
     document.getElementById('kcSessionId').textContent = data.session_id || '-';
     document.getElementById('kcProcessingTime').textContent = Math.round(data.processing_time || 0) + 's';
 
-    // R2 link
+    // R2 link - with null checks
     const r2Link = document.getElementById('kcR2Link');
     const r2Sep = document.getElementById('kcR2Sep');
-    if (data.r2_upload && data.r2_upload.success && data.r2_upload.url) {
-        r2Link.href = data.r2_upload.url;
-        r2Link.style.display = 'inline';
-        r2Sep.style.display = 'inline';
-    } else {
-        r2Link.style.display = 'none';
-        r2Sep.style.display = 'none';
+    if (r2Link && r2Sep) {
+        if (data.r2_upload && data.r2_upload.success && data.r2_upload.url) {
+            r2Link.href = data.r2_upload.url;
+            r2Link.style.display = 'inline';
+            r2Sep.style.display = 'inline';
+        } else {
+            r2Link.style.display = 'none';
+            r2Sep.style.display = 'none';
+        }
     }
 
     // Render key claims list

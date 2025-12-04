@@ -1,14 +1,18 @@
 # agents/publication_bias_detector.py
 """
-Publication Bias Detector with MBFC Integration
+Publication Bias Detector with MBFC Integration + Supabase Storage
 Identifies political leanings and biases of news sources using:
-1. Local database (fast fallback)
+1. Supabase database cache (fastest)
 2. Media Bias/Fact Check (MBFC) web lookup (primary source)
+3. Local database (fallback)
+
+UPDATED: Added country_freedom_rating field and Supabase integration
 """
 
 from typing import Dict, Optional, List
 from pydantic import BaseModel, Field
 from urllib.parse import urlparse
+from datetime import datetime, timedelta
 import asyncio
 import re
 import json
@@ -29,12 +33,16 @@ class PublicationProfile(BaseModel):
     target_audience: Optional[str] = None
     known_biases: List[str] = []
     credibility_notes: Optional[str] = None
-    # New MBFC-specific fields
+    # MBFC-specific fields
     factual_reporting: Optional[str] = None
     credibility_rating: Optional[str] = None
+    country_freedom_rating: Optional[str] = None  # NEW: Press freedom rating
     mbfc_url: Optional[str] = None
     failed_fact_checks: List[str] = []
-    source: str = "local"  # "local" or "mbfc"
+    source: str = "local"  # "local", "mbfc", or "database"
+    # Tier assignment
+    assigned_tier: Optional[int] = None
+    tier_reasoning: Optional[str] = None
 
 
 class MBFCResult(BaseModel):
@@ -45,6 +53,7 @@ class MBFCResult(BaseModel):
     factual_reporting: Optional[str] = None
     factual_score: Optional[float] = None
     credibility_rating: Optional[str] = None
+    country_freedom_rating: Optional[str] = None  # NEW: MBFC press freedom rating
     country: Optional[str] = None
     media_type: Optional[str] = None
     traffic_popularity: Optional[str] = None
@@ -59,20 +68,21 @@ class MBFCResult(BaseModel):
 class PublicationBiasDetector:
     """
     Detects publication bias using MBFC web lookup with local database fallback
-    
+
     Flow:
-    1. Clean input URL to get root domain
-    2. Search MBFC using Brave Search API
+    1. Check Supabase database cache first
+    2. If not found or stale, search MBFC using Brave Search API
     3. Scrape MBFC page
     4. Verify it's the correct publication
     5. Extract bias/credibility data
-    6. Fall back to local database if MBFC lookup fails
+    6. Save to Supabase database
+    7. Fall back to local database if all else fails
     """
-    
+
     def __init__(self, config=None, brave_searcher=None, scraper=None):
         """
         Initialize detector with optional dependencies
-        
+
         Args:
             config: Configuration object with API keys
             brave_searcher: BraveSearcher instance for web search
@@ -81,7 +91,7 @@ class PublicationBiasDetector:
         self.config = config
         self.brave_searcher = brave_searcher
         self.scraper = scraper
-        
+
         # Initialize LLM for verification and extraction
         if config and hasattr(config, 'openai_api_key'):
             self.llm = ChatOpenAI(
@@ -90,7 +100,7 @@ class PublicationBiasDetector:
             ).bind(response_format={"type": "json_object"})
         else:
             self.llm = None
-        
+
         # Load prompts
         try:
             from prompts.mbfc_prompts import get_verify_prompts, get_extract_prompts
@@ -100,16 +110,33 @@ class PublicationBiasDetector:
             fact_logger.logger.warning("MBFC prompts not found, using inline prompts")
             self.verify_prompts = None
             self.extract_prompts = None
-        
+
         # Local publication database (fallback)
         self.publication_database = self._init_local_database()
-        
+
+        # Initialize Supabase service for database storage
+        try:
+            from utils.supabase_service import get_supabase_service
+            self.supabase_service = get_supabase_service(config)
+            self.supabase_enabled = self.supabase_service.enabled
+            if self.supabase_enabled:
+                fact_logger.logger.info("✅ Supabase integration enabled for MBFC storage")
+        except ImportError:
+            fact_logger.logger.warning("⚠️ Supabase service not found - database caching disabled")
+            self.supabase_service = None
+            self.supabase_enabled = False
+        except Exception as e:
+            fact_logger.logger.warning(f"⚠️ Supabase not available: {e}")
+            self.supabase_service = None
+            self.supabase_enabled = False
+
         fact_logger.log_component_start(
             "PublicationBiasDetector",
             num_local_publications=len(self.publication_database),
-            mbfc_enabled=self.llm is not None
+            mbfc_enabled=self.llm is not None,
+            supabase_enabled=self.supabase_enabled
         )
-    
+
     def _init_local_database(self) -> Dict[str, PublicationProfile]:
         """Initialize local publication database as fallback"""
         return {
@@ -128,72 +155,72 @@ class PublicationBiasDetector:
                 political_leaning="center-left",
                 bias_rating=5.5,
                 ownership="Warner Bros. Discovery",
-                target_audience="Mainstream liberal-leaning viewers",
-                known_biases=["Liberal perspective", "Pro-Democratic at times"],
-                credibility_notes="Generally factual with some left-leaning editorial choices"
+                target_audience="Liberal-leaning viewers",
+                known_biases=["Liberal perspective", "Sensationalism"],
+                credibility_notes="Mostly factual with some sensationalism"
             ),
             "nytimes.com": PublicationProfile(
                 name="The New York Times",
                 political_leaning="center-left",
-                bias_rating=4.5,
+                bias_rating=5.0,
                 ownership="The New York Times Company",
-                target_audience="Educated, liberal-leaning readers",
-                known_biases=["Liberal editorial stance", "Urban perspective"],
-                credibility_notes="High factual accuracy with center-left editorial perspective"
+                target_audience="Educated, urban readers",
+                known_biases=["Editorial board leans left", "Strong opinion section"],
+                credibility_notes="High factual accuracy in news reporting"
+            ),
+            "washingtonpost.com": PublicationProfile(
+                name="The Washington Post",
+                political_leaning="center-left",
+                bias_rating=5.0,
+                ownership="Jeff Bezos",
+                target_audience="Political news consumers",
+                known_biases=["Liberal editorial stance"],
+                credibility_notes="High factual accuracy"
             ),
             "wsj.com": PublicationProfile(
-                name="Wall Street Journal",
+                name="The Wall Street Journal",
                 political_leaning="center-right",
-                bias_rating=4.0,
-                ownership="News Corp",
-                target_audience="Business professionals, conservatives",
+                bias_rating=4.5,
+                ownership="News Corp (Rupert Murdoch)",
+                target_audience="Business professionals",
                 known_biases=["Conservative editorial page", "Pro-business"],
-                credibility_notes="High factual news reporting with conservative editorial section"
+                credibility_notes="High factual accuracy in news, conservative opinion"
             ),
             "breitbart.com": PublicationProfile(
-                name="Breitbart News",
-                political_leaning="right",
+                name="Breitbart",
+                political_leaning="far-right",
                 bias_rating=9.0,
                 ownership="Breitbart News Network",
-                target_audience="Far-right conservatives",
-                known_biases=["Far-right perspective", "Nationalist", "Anti-immigration"],
-                credibility_notes="Mixed factual reporting with extreme right-wing bias"
+                target_audience="Conservative/nationalist audience",
+                known_biases=["Far-right perspective", "Inflammatory content"],
+                credibility_notes="Mixed factual reporting, questionable source"
             ),
             # UK Publications
             "telegraph.co.uk": PublicationProfile(
                 name="The Telegraph",
                 political_leaning="center-right",
                 bias_rating=5.5,
-                ownership="The Telegraph Media Group",
-                target_audience="Conservative readers in UK",
-                known_biases=["Conservative perspective", "Pro-Brexit"],
+                ownership="Telegraph Media Group",
+                target_audience="Conservative UK readers",
+                known_biases=["Conservative perspective", "Pro-business"],
                 credibility_notes="Generally reliable with conservative editorial stance"
             ),
             "theguardian.com": PublicationProfile(
                 name="The Guardian",
-                political_leaning="center-left",
-                bias_rating=5.0,
-                ownership="Guardian Media Group",
-                target_audience="Progressive readers in UK",
-                known_biases=["Liberal-left perspective", "Environmental focus"],
-                credibility_notes="High factual accuracy with left-leaning editorial perspective"
+                political_leaning="left",
+                bias_rating=6.0,
+                ownership="Scott Trust Limited",
+                target_audience="Progressive readers",
+                known_biases=["Left-wing editorial stance", "Pro-environment"],
+                credibility_notes="High factual accuracy with left-leaning perspective"
             ),
-            "dailymail.co.uk": PublicationProfile(
-                name="Daily Mail",
-                political_leaning="right",
-                bias_rating=7.0,
-                ownership="Daily Mail and General Trust",
-                target_audience="Middle-class conservatives in UK",
-                known_biases=["Right-wing populism", "Sensationalist"],
-                credibility_notes="Factually mixed with strong right-wing bias"
-            ),
-            # Neutral/Centrist
+            # Wire Services (most neutral)
             "reuters.com": PublicationProfile(
                 name="Reuters",
                 political_leaning="center",
                 bias_rating=2.0,
                 ownership="Thomson Reuters",
-                target_audience="General audience, journalists",
+                target_audience="General audience",
                 known_biases=["Minimal bias", "Fact-focused"],
                 credibility_notes="Very high factual accuracy, minimal bias"
             ),
@@ -216,12 +243,12 @@ class PublicationBiasDetector:
                 credibility_notes="High factual accuracy with efforts toward balance"
             ),
         }
-    
+
     @staticmethod
     def clean_url_to_domain(url: str) -> str:
         """
         Clean a URL to get just the root domain
-        
+
         Examples:
             "https://www.cnn.com/politics/article" -> "cnn.com"
             "cnn.com" -> "cnn.com"
@@ -229,19 +256,19 @@ class PublicationBiasDetector:
         """
         if not url:
             return ""
-        
+
         # Add scheme if missing
         if not url.startswith(('http://', 'https://')):
             url = 'https://' + url
-        
+
         try:
             parsed = urlparse(url)
             domain = parsed.netloc.lower()
-            
+
             # Remove www. prefix
             if domain.startswith('www.'):
                 domain = domain[4:]
-            
+
             return domain
         except Exception:
             # If parsing fails, try simple cleanup
@@ -250,38 +277,140 @@ class PublicationBiasDetector:
             domain = re.sub(r'^www\.', '', domain)
             domain = domain.split('/')[0]
             return domain
-    
+
+    async def check_database_first(self, domain: str) -> Optional[MBFCResult]:
+        """
+        Check Supabase database for existing MBFC data before doing web lookup
+
+        Args:
+            domain: The publication domain
+
+        Returns:
+            MBFCResult if found in database and not stale, None otherwise
+        """
+        if not self.supabase_enabled or not self.supabase_service:
+            return None
+
+        try:
+            record = self.supabase_service.get_credibility_by_domain(domain)
+
+            if not record:
+                return None
+
+            # Check if record is recent (within 30 days)
+            last_verified = record.get('last_verified_at')
+            if last_verified:
+                try:
+                    # Handle different datetime formats
+                    if isinstance(last_verified, str):
+                        verified_date = datetime.fromisoformat(last_verified.replace('Z', '+00:00'))
+                    else:
+                        verified_date = last_verified
+
+                    now = datetime.now(verified_date.tzinfo) if verified_date.tzinfo else datetime.utcnow()
+                    if now - verified_date > timedelta(days=30):
+                        fact_logger.logger.info(f"📅 Database record for {domain} is stale, will refresh")
+                        return None
+                except Exception as e:
+                    fact_logger.logger.warning(f"Could not parse date: {e}")
+
+            # Convert database record to MBFCResult
+            fact_logger.logger.info(f"✅ Found {domain} in database cache")
+
+            # Get publication name from names array or domain
+            names = record.get('names', [])
+            pub_name = names[0] if names else domain
+
+            return MBFCResult(
+                publication_name=pub_name,
+                bias_rating=record.get('mbfc_bias_rating'),
+                bias_score=record.get('mbfc_bias_score'),
+                factual_reporting=record.get('mbfc_factual_reporting'),
+                factual_score=record.get('mbfc_factual_score'),
+                credibility_rating=record.get('mbfc_credibility_rating'),
+                country_freedom_rating=record.get('mbfc_country_freedom_rating'),
+                country=record.get('country'),
+                media_type=record.get('media_type'),
+                traffic_popularity=record.get('traffic_popularity'),
+                ownership=record.get('ownership'),
+                funding=record.get('funding'),
+                failed_fact_checks=record.get('failed_fact_checks', []),
+                summary=record.get('mbfc_summary'),
+                special_tags=record.get('mbfc_special_tags', []),
+                mbfc_url=record.get('mbfc_url')
+            )
+
+        except Exception as e:
+            fact_logger.logger.warning(f"⚠️ Database lookup failed: {e}")
+            return None
+
+    async def save_mbfc_to_database(self, domain: str, mbfc_result: MBFCResult) -> bool:
+        """
+        Save MBFC lookup result to Supabase database with AI features
+
+        Args:
+            domain: The publication domain
+            mbfc_result: The extracted MBFC data
+
+        Returns:
+            True if saved successfully, False otherwise
+        """
+        if not self.supabase_enabled or not self.supabase_service:
+            return False
+
+        try:
+            # Convert MBFCResult to dict
+            mbfc_data = mbfc_result.model_dump()
+
+            # Use the complete update with AI features (generates names and tier)
+            result = await self.supabase_service.update_with_ai_features(
+                domain=domain,
+                mbfc_data=mbfc_data
+            )
+
+            if result:
+                fact_logger.logger.info(f"✅ Saved MBFC data to Supabase: {domain}")
+                return True
+            return False
+
+        except Exception as e:
+            fact_logger.logger.error(f"❌ Failed to save to Supabase: {e}")
+            return False
+
     async def lookup_mbfc(self, domain: str) -> Optional[MBFCResult]:
         """
         Look up publication on MBFC using web search and scraping
-        
+
         Args:
             domain: Clean domain (e.g., "cnn.com")
-            
+
         Returns:
             MBFCResult if found and verified, None otherwise
         """
+        # Check database first before web lookup
+        cached_result = await self.check_database_first(domain)
+        if cached_result:
+            return cached_result
+
         if not self.brave_searcher or not self.scraper or not self.llm:
             fact_logger.logger.warning("MBFC lookup not available - missing dependencies")
             return None
-        
+
         try:
             fact_logger.logger.info(f"🔍 Searching MBFC for: {domain}")
-            
+
             # Step 1: Search MBFC using site: operator
-            # Brave Search supports site: operator like Google
             search_query = f"site:mediabiasfactcheck.com {domain}"
-            
+
             results = await self.brave_searcher.search(search_query)
-            
+
             if not results.results:
                 fact_logger.logger.info(f"📭 No MBFC results found for {domain}")
                 return None
-            
+
             # Step 2: Find the most relevant MBFC URL
-            # Look for URLs that are direct publication pages (not blog posts or comparisons)
             mbfc_url = None
-            for result in results.results[:5]:  # Check top 5 results
+            for result in results.results[:5]:
                 url = result.get('url', '')
                 # Skip blog posts, comparison pages, etc.
                 if '/202' in url:  # Blog post URLs contain year
@@ -289,35 +418,35 @@ class PublicationBiasDetector:
                 if 'mediabiasfactcheck.com' in url:
                     mbfc_url = url
                     break
-            
+
             if not mbfc_url:
                 # Fall back to first result if no better match
                 mbfc_url = results.results[0].get('url', '')
-            
+
             if not mbfc_url or 'mediabiasfactcheck.com' not in mbfc_url:
                 fact_logger.logger.info(f"📭 No valid MBFC page found for {domain}")
                 return None
-            
+
             fact_logger.logger.info(f"📰 Found MBFC page: {mbfc_url}")
-            
+
             # Step 3: Scrape the MBFC page
             scraped_content = await self.scraper.scrape_urls_for_facts([mbfc_url])
-            
+
             mbfc_content = scraped_content.get(mbfc_url, '')
             if not mbfc_content or len(mbfc_content) < 200:
                 fact_logger.logger.warning(f"⚠️ Failed to scrape MBFC page: {mbfc_url}")
                 return None
-            
+
             # Step 4: Verify this is the correct publication
             is_verified = await self._verify_publication(domain, mbfc_content)
-            
+
             if not is_verified:
                 fact_logger.logger.info(f"❌ MBFC page does not match {domain}")
                 return None
-            
+
             # Step 5: Extract bias data
             mbfc_result = await self._extract_bias_data(mbfc_content)
-            
+
             if mbfc_result:
                 mbfc_result.mbfc_url = mbfc_url
                 fact_logger.logger.info(
@@ -325,16 +454,24 @@ class PublicationBiasDetector:
                     extra={
                         "bias": mbfc_result.bias_rating,
                         "factual": mbfc_result.factual_reporting,
-                        "credibility": mbfc_result.credibility_rating
+                        "credibility": mbfc_result.credibility_rating,
+                        "freedom": mbfc_result.country_freedom_rating
                     }
                 )
-            
+
+                # Save to Supabase database (async, non-blocking)
+                if self.supabase_enabled:
+                    try:
+                        await self.save_mbfc_to_database(domain, mbfc_result)
+                    except Exception as e:
+                        fact_logger.logger.warning(f"⚠️ Database save failed (non-critical): {e}")
+
             return mbfc_result
-            
+
         except Exception as e:
             fact_logger.logger.error(f"❌ MBFC lookup failed: {e}", exc_info=True)
             return None
-    
+
     async def _verify_publication(self, target_domain: str, mbfc_content: str) -> bool:
         """Verify that the MBFC page is about the correct publication"""
         if not self.verify_prompts or not self.llm:
@@ -367,7 +504,7 @@ class PublicationBiasDetector:
             fact_logger.logger.error(f"Verification failed: {e}")
             # Fallback to simple matching
             return target_domain.replace('.com', '').replace('.co.uk', '') in mbfc_content.lower()
-    
+
     async def _extract_bias_data(self, mbfc_content: str) -> Optional[MBFCResult]:
         """Extract structured bias data from MBFC page content"""
         if not self.extract_prompts or not self.llm:
@@ -392,7 +529,7 @@ class PublicationBiasDetector:
             else:
                 result = json.loads(str(content))
 
-            # ✅ FIX: Ensure list fields are lists, not None
+            # Ensure list fields are lists, not None
             if result.get('special_tags') is None:
                 result['special_tags'] = []
             elif isinstance(result.get('special_tags'), str):
@@ -408,10 +545,10 @@ class PublicationBiasDetector:
         except Exception as e:
             fact_logger.logger.error(f"Data extraction failed: {e}")
             return None
-    
+
     def _convert_mbfc_to_profile(self, mbfc: MBFCResult) -> PublicationProfile:
         """Convert MBFC result to PublicationProfile format"""
-        
+
         # Map MBFC bias rating to our scale (0-10)
         bias_map = {
             "FAR LEFT": 8.5,
@@ -422,7 +559,7 @@ class PublicationBiasDetector:
             "RIGHT": 6.5,
             "FAR RIGHT": 8.5,
         }
-        
+
         # Normalize political leaning
         leaning_map = {
             "FAR LEFT": "far-left",
@@ -433,32 +570,34 @@ class PublicationBiasDetector:
             "RIGHT": "right",
             "FAR RIGHT": "far-right",
         }
-        
+
         bias_rating_upper = (mbfc.bias_rating or "CENTER").upper()
-        
+
         # Calculate bias score
         if mbfc.bias_score is not None:
             # MBFC uses negative for left, positive for right
             bias_score = abs(mbfc.bias_score)  # Normalize to 0-10 range
         else:
             bias_score = bias_map.get(bias_rating_upper, 5.0)
-        
+
         # Build known biases list
         known_biases = []
         if mbfc.bias_rating:
             known_biases.append(f"{mbfc.bias_rating} bias per MBFC")
         if mbfc.special_tags:
             known_biases.extend(mbfc.special_tags)
-        
+
         # Build credibility notes
         credibility_parts = []
         if mbfc.factual_reporting:
             credibility_parts.append(f"Factual reporting: {mbfc.factual_reporting}")
         if mbfc.credibility_rating:
             credibility_parts.append(f"Credibility: {mbfc.credibility_rating}")
+        if mbfc.country_freedom_rating:
+            credibility_parts.append(f"Press Freedom: {mbfc.country_freedom_rating}")
         if mbfc.summary:
             credibility_parts.append(mbfc.summary)
-        
+
         return PublicationProfile(
             name=mbfc.publication_name,
             political_leaning=leaning_map.get(bias_rating_upper, "center"),
@@ -469,11 +608,12 @@ class PublicationBiasDetector:
             credibility_notes=" | ".join(credibility_parts) if credibility_parts else None,
             factual_reporting=mbfc.factual_reporting,
             credibility_rating=mbfc.credibility_rating,
+            country_freedom_rating=mbfc.country_freedom_rating,
             mbfc_url=mbfc.mbfc_url,
             failed_fact_checks=mbfc.failed_fact_checks,
             source="mbfc"
         )
-    
+
     async def detect_publication_async(
         self, 
         publication_url: Optional[str] = None,
@@ -481,68 +621,68 @@ class PublicationBiasDetector:
     ) -> Optional[PublicationProfile]:
         """
         Detect publication bias - async version with MBFC lookup
-        
+
         Args:
             publication_url: URL of the publication (preferred)
             publication_name: Name of the publication (fallback)
-            
+
         Returns:
             PublicationProfile if found, None otherwise
         """
         # Try URL-based lookup first (MBFC)
         if publication_url:
             domain = self.clean_url_to_domain(publication_url)
-            
+
             if domain:
-                # Try MBFC lookup
+                # Try MBFC lookup (includes database cache check)
                 mbfc_result = await self.lookup_mbfc(domain)
-                
+
                 if mbfc_result:
                     return self._convert_mbfc_to_profile(mbfc_result)
-                
+
                 # Fall back to local database
                 if domain in self.publication_database:
                     profile = self.publication_database[domain]
                     fact_logger.logger.info(f"📰 Using local profile for: {domain}")
                     return profile
-        
+
         # Fall back to name-based lookup (local only)
         if publication_name:
             return self.detect_publication(publication_name)
-        
+
         return None
-    
+
     def detect_publication(self, publication_name: Optional[str]) -> Optional[PublicationProfile]:
         """
         Detect publication bias from name (sync version, local database only)
-        
+
         Args:
             publication_name: Name of the publication (e.g., "The Telegraph")
-            
+
         Returns:
             PublicationProfile if found, None otherwise
         """
         if not publication_name:
             return None
-        
+
         # Normalize the name for matching
         normalized_name = publication_name.lower().strip()
-        
+
         # Try domain-based match first
         for domain, profile in self.publication_database.items():
             if normalized_name in domain or domain.replace('.com', '').replace('.co.uk', '') in normalized_name:
                 fact_logger.logger.info(f"📰 Detected publication: {profile.name}")
                 return profile
-        
+
         # Try name-based match
         for domain, profile in self.publication_database.items():
             if normalized_name in profile.name.lower() or profile.name.lower() in normalized_name:
                 fact_logger.logger.info(f"📰 Detected publication (name match): {profile.name}")
                 return profile
-        
+
         fact_logger.logger.info(f"📰 Unknown publication: {publication_name}")
         return None
-    
+
     def get_publication_context(
         self, 
         publication_url: Optional[str] = None,
@@ -551,12 +691,12 @@ class PublicationBiasDetector:
     ) -> str:
         """
         Get formatted context about publication bias for use in prompts
-        
+
         Args:
             publication_url: URL of the publication
             publication_name: Name of the publication
             profile: Pre-fetched PublicationProfile (if available)
-            
+
         Returns:
             Formatted string describing publication bias
         """
@@ -566,61 +706,106 @@ class PublicationBiasDetector:
                 profile = self.publication_database.get(domain)
             elif publication_name:
                 profile = self.detect_publication(publication_name)
-        
+
         if not profile:
             if publication_url:
                 return f"PUBLICATION: {publication_url} (unknown publication - no bias profile available)"
             elif publication_name:
                 return f"PUBLICATION: {publication_name} (unknown publication - no bias profile available)"
             return "PUBLICATION: Not specified"
-        
+
         # Build context with all available information
         context_parts = [
             f"PUBLICATION: {profile.name}",
             f"KNOWN POLITICAL LEANING: {profile.political_leaning}",
             f"BIAS RATING: {profile.bias_rating}/10",
         ]
-        
+
         if profile.factual_reporting:
             context_parts.append(f"FACTUAL REPORTING: {profile.factual_reporting}")
-        
+
         if profile.credibility_rating:
             context_parts.append(f"CREDIBILITY RATING: {profile.credibility_rating}")
-        
+
+        if profile.country_freedom_rating:
+            context_parts.append(f"PRESS FREEDOM RATING: {profile.country_freedom_rating}")
+
+        if profile.assigned_tier:
+            context_parts.append(f"ASSIGNED TIER: {profile.assigned_tier}/5")
+
         if profile.ownership:
             context_parts.append(f"OWNERSHIP: {profile.ownership}")
-        
+
         if profile.target_audience:
             context_parts.append(f"TARGET AUDIENCE / MEDIA TYPE: {profile.target_audience}")
-        
+
         if profile.known_biases:
             context_parts.append(f"KNOWN BIASES: {', '.join(profile.known_biases)}")
-        
+
         if profile.credibility_notes:
             context_parts.append(f"CREDIBILITY NOTES: {profile.credibility_notes}")
-        
+
         if profile.failed_fact_checks:
             context_parts.append(f"FAILED FACT CHECKS: {len(profile.failed_fact_checks)} on record")
-        
+
         if profile.mbfc_url:
             context_parts.append(f"SOURCE: Media Bias/Fact Check ({profile.mbfc_url})")
         else:
-            context_parts.append("SOURCE: Local database")
-        
+            context_parts.append(f"SOURCE: {profile.source.capitalize()} database")
+
         context_parts.append(
             f"\n⚠️ IMPORTANT: This publication has a known {profile.political_leaning} bias. "
             "Consider how this might influence the framing and presentation of information."
         )
-        
+
         return "\n".join(context_parts)
-    
+
     def add_publication(self, domain: str, profile: PublicationProfile) -> None:
         """
         Add a new publication to the local database
-        
+
         Args:
             domain: Domain key (e.g., "example.com")
             profile: PublicationProfile to add
         """
         self.publication_database[domain] = profile
         fact_logger.logger.info(f"➕ Added publication profile: {profile.name}")
+
+    def is_propaganda_source(self, domain: str) -> bool:
+        """
+        Check if a domain is a known propaganda source
+
+        Args:
+            domain: The publication domain
+
+        Returns:
+            True if flagged as propaganda, False otherwise
+        """
+        if self.supabase_enabled and self.supabase_service:
+            return self.supabase_service.is_propaganda_source(domain)
+        return False
+
+    def get_quick_credibility(self, domain: str) -> Optional[Dict]:
+        """
+        Get a quick credibility check for a domain
+
+        Args:
+            domain: The publication domain
+
+        Returns:
+            Dictionary with tier and credibility info, or None
+        """
+        if self.supabase_enabled and self.supabase_service:
+            return self.supabase_service.get_quick_credibility(domain)
+
+        # Fallback to local database
+        profile = self.publication_database.get(domain)
+        if profile:
+            return {
+                'domain': domain,
+                'tier': 2 if profile.bias_rating < 5 else 3,
+                'credibility_rating': profile.credibility_rating,
+                'is_propaganda': False,
+                'source': 'local'
+            }
+        return None

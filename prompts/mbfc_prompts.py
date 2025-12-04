@@ -2,6 +2,8 @@
 """
 Prompts for Media Bias/Fact Check (MBFC) Integration
 Verifies correct publication match and extracts bias/credibility data
+
+UPDATED: Added country_freedom_rating extraction
 """
 
 # Prompt to verify if the scraped MBFC page matches the target publication
@@ -35,12 +37,14 @@ Return ONLY valid JSON in this exact format:
 
 
 # Prompt to extract structured bias data from MBFC page
+# UPDATED: Now includes country_freedom_rating
 EXTRACT_BIAS_SYSTEM = """You are a data extraction specialist. Your task is to extract structured bias and credibility information from Media Bias/Fact Check (MBFC) page content.
 
 MBFC uses these standard ratings:
 - Bias Rating: FAR LEFT, LEFT, LEFT-CENTER, CENTER, RIGHT-CENTER, RIGHT, FAR RIGHT (often with a numeric score like -3.6)
 - Factual Reporting: VERY LOW, LOW, MOSTLY FACTUAL, HIGH, VERY HIGH (often with a numeric score)
 - Credibility Rating: LOW CREDIBILITY, MEDIUM CREDIBILITY, HIGH CREDIBILITY
+- Country Freedom Rating: This indicates press freedom in the source's country. Look for terms like "MOSTLY FREE", "FREE", "PARTLY FREE", "NOT FREE" - often appears near "MBFC Freedom Rating" or "Press Freedom"
 - Some sources may also have: CONSPIRACY-PSEUDOSCIENCE, QUESTIONABLE SOURCE, PRO-SCIENCE, SATIRE
 
 Extract ALL available information. If a field is not found, use null.
@@ -58,14 +62,17 @@ Return ONLY valid JSON in this exact format:
   "bias_rating": "LEFT-CENTER, RIGHT, etc.",
   "bias_score": -3.6 or null if not found,
   "factual_reporting": "MOSTLY FACTUAL, HIGH, etc.",
-  "factual_score": 3.7 or not found if not found,
+  "factual_score": 3.7 or null if not found,
   "credibility_rating": "MEDIUM CREDIBILITY, HIGH CREDIBILITY, etc.",
+  "country_freedom_rating": "MOSTLY FREE, FREE, PARTLY FREE, NOT FREE, etc. or null if not found",
   "country": "USA, UK, etc.",
   "media_type": "TV Station/Website, Newspaper, etc.",
   "traffic_popularity": "High Traffic, Medium Traffic, etc.",
+  "ownership": "Who owns this publication",
   "funding": "How it's funded (advertising, subscriptions, etc.)",
   "summary": "Brief 1-2 sentence summary of the MBFC assessment",
-  "special_tags": ["QUESTIONABLE SOURCE", "CONSPIRACY-PSEUDOSCIENCE", etc. if applicable]
+  "special_tags": ["QUESTIONABLE SOURCE", "CONSPIRACY-PSEUDOSCIENCE", "PRO-SCIENCE", "SATIRE", etc. if applicable],
+  "failed_fact_checks": ["List any mentioned failed fact checks or empty array if none"]
 }}"""
 
 

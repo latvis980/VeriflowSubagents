@@ -301,7 +301,7 @@ class PublicationBiasDetector:
             fact_logger.logger.info(f"📰 Found MBFC page: {mbfc_url}")
             
             # Step 3: Scrape the MBFC page
-            scraped_content = await self.scraper.scrape_urls([mbfc_url])
+            scraped_content = await self.scraper.scrape_urls_for_facts([mbfc_url])
             
             mbfc_content = scraped_content.get(mbfc_url, '')
             if not mbfc_content or len(mbfc_content) < 200:

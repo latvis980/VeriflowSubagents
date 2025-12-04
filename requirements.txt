@@ -35,3 +35,5 @@ gevent>=24.2.1
 
 # Cloudflare R2 Storage (S3-compatible)
 boto3>=1.28.0
+
+supabase>=2.0.0

@@ -183,21 +183,15 @@ class KeyClaimsOrchestrator:
                 )
                 search_results_by_claim[claim.id] = search_results
 
-                # NEW: Build query audits for this claim
+                # Build query audits for this claim
+                # SIMPLIFIED: No need to distinguish query types - AI handles language detection
                 claim_query_audits = []
                 for query, brave_results in search_results.items():
-                    # Determine query type
-                    query_type = "english"
-                    if queries.local_queries and query in queries.local_queries:
-                        query_type = "local_language"
-                    elif queries.fallback_query and query == queries.fallback_query:
-                        query_type = "fallback"
-
                     qa = build_query_audit(
                         query=query,
                         brave_results=brave_results,
-                        query_type=query_type,
-                        language=content_location.language if content_location else "en"
+                        query_type="search",  # Simplified - just "search"
+                        language=queries.local_language_used or "en"
                     )
                     claim_query_audits.append(qa)
                     total_results += len(brave_results.results)
@@ -311,7 +305,7 @@ class KeyClaimsOrchestrator:
                     'statement': claim.statement
                 })()
 
-                excerpts = await self.highlighter.extract_excerpts(
+                excerpts = await self.highlighter.highlight(
                     fact=fact_like,
                     scraped_content=scraped_content
                 )

@@ -1,16 +1,23 @@
 # prompts/key_claims_extractor_prompts.py
 """
-Prompts for the Key Claims Extractor component
-Extracts the 2-3 MOST IMPORTANT verifiable facts from text
+Prompts for the Key Claims Extractor component - ENHANCED VERSION
 
-These are the central factual assertions that define what the article is about,
-expressed in concrete, verifiable terms.
+Extracts:
+1. 2-3 MOST IMPORTANT verifiable facts from text
+2. broad_context: Quick AI assessment of the content type and credibility
+3. media_sources: All media platforms mentioned or referenced
+4. query_instructions: Strategic suggestions for downstream query generation
 """
 
-SYSTEM_PROMPT = """You are an expert at identifying the most important VERIFIABLE FACTS in any text.
+SYSTEM_PROMPT = """You are an expert at identifying the most important VERIFIABLE FACTS in any text, AND at analyzing content for credibility indicators.
 
 YOUR MISSION:
-Extract the 2-3 MOST IMPORTANT FACTS that the text is reporting. These must be CONCRETE and VERIFIABLE - not interpretations or opinions.
+1. Extract the 2-3 MOST IMPORTANT FACTS that the text is reporting
+2. Assess the overall content context and credibility indicators
+3. Identify all media sources mentioned or referenced
+4. Provide strategic instructions for search query generation
+
+=== PART 1: KEY FACTS EXTRACTION ===
 
 WHAT ARE KEY VERIFIABLE FACTS?
 - The PRIMARY factual assertions the article is built around
@@ -37,41 +44,41 @@ WHAT TO AVOID:
 ❌ Vague generalizations ("Many people believe...")
 ❌ Author's conclusions or recommendations
 
-EXAMPLES - GOOD vs BAD:
-
-Example 1 - Article about a historical photographer:
-❌ BAD: "The investigation reveals the courage of ordinary individuals during occupation"
-❌ BAD: "Minot's work represents an important chapter in resistance history"
-✅ GOOD: "Raoul Minot secretly photographed Nazi-occupied Paris from 1940 to 1944"
-✅ GOOD: "Minot was arrested by the Gestapo in June 1944 and died in deportation"
-✅ GOOD: "The French government officially recognized Minot as a resistance fighter in 2023"
-
-Example 2 - Article about a medical study:
-❌ BAD: "This treatment represents a breakthrough in heart disease prevention"
-❌ BAD: "The research could transform how we approach cardiovascular health"
-✅ GOOD: "A Stanford study of 500 patients found the drug reduced heart attacks by 40%"
-✅ GOOD: "The FDA approved Cardiomax for clinical use on March 15, 2024"
-
-Example 3 - Article about a company:
-❌ BAD: "Company X has become a leader in the renewable energy sector"
-❌ BAD: "Their technology will transform the industry"
-✅ GOOD: "Company X's revenue reached $2.3 billion in 2024, up 45% from 2023"
-✅ GOOD: "Company X acquired SolarTech for $500 million in January 2024"
-
 THE KEY TEST:
 For each fact, ask: "Can I search for this and find a source that confirms or denies it?"
 - If YES → It's a good verifiable fact
 - If NO → It's probably too abstract or interpretive
 
-STRICT RULES:
-- Extract EXACTLY 2-3 key facts (no more, no less)
-- Each fact MUST contain specific details (names, dates, places, or numbers)
-- Each fact MUST be verifiable against external sources
-- NO thesis statements, interpretations, or opinions
-- NO vague claims without concrete specifics
-- If the text lacks verifiable facts, extract what's available but note low confidence
+=== PART 2: BROAD CONTEXT ASSESSMENT ===
 
-COUNTRY AND LANGUAGE DETECTION:
+Analyze the overall content to assess:
+- content_type: What kind of content is this? (news article, blog post, social media post, press release, academic paper, opinion piece, satire, unknown)
+- credibility_assessment: Based on observable indicators, how credible does this content appear? (appears legitimate, some concerns, significant red flags, likely hoax/satire)
+- reasoning: Brief explanation of your assessment
+- red_flags: Any concerning indicators you observed (sensational language, missing sources, implausible claims, etc.)
+- positive_indicators: Credibility-boosting factors (named sources, specific verifiable details, reputable publication markers, etc.)
+
+=== PART 3: MEDIA SOURCES IDENTIFICATION ===
+
+Identify ALL media platforms, publications, or information sources mentioned or referenced in the text:
+- News outlets (newspapers, TV channels, news websites)
+- Social media platforms (Twitter/X, Facebook, Instagram, TikTok, etc.)
+- Wire services (Reuters, AP, AFP, etc.)
+- Government or official sources
+- Academic or research institutions
+- Any other information sources cited or referenced
+
+=== PART 4: QUERY INSTRUCTIONS ===
+
+Based on your analysis, provide strategic guidance for generating effective search queries:
+- primary_strategy: What overall approach should be used for searching? (standard verification, hoax checking, official source confirmation, etc.)
+- suggested_modifiers: What terms might help narrow or focus searches? (e.g., "official", "announcement", "fact check", "debunked", specific date ranges, etc.)
+- temporal_guidance: Is this time-sensitive? What time frame is relevant? (breaking/very recent, recent, historical, ongoing)
+- source_priority: What types of sources should be prioritized for verification? (official government sites, news agencies, academic sources, etc.)
+- special_considerations: Any other relevant guidance based on the content analysis
+
+=== COUNTRY AND LANGUAGE DETECTION ===
+
 Also detect the primary geographic focus:
 - Identify the PRIMARY country where the main events/claims are situated
 - Determine the main language of that country for search queries
@@ -79,7 +86,11 @@ Also detect the primary geographic focus:
 IMPORTANT: You MUST return valid JSON only. No other text or explanations."""
 
 
-USER_PROMPT = """Analyze the following text and extract the 2-3 MOST IMPORTANT VERIFIABLE FACTS.
+USER_PROMPT = """Analyze the following text and extract:
+1. The 2-3 MOST IMPORTANT VERIFIABLE FACTS
+2. Broad context assessment (content type and credibility indicators)
+3. All media sources mentioned or referenced
+4. Strategic instructions for query generation
 
 TEXT TO ANALYZE:
 {text}
@@ -90,9 +101,11 @@ SOURCES MENTIONED:
 INSTRUCTIONS:
 1. Read the entire text carefully
 2. Identify the CONCRETE FACTS with specific details (names, dates, places, numbers)
-3. Select the 2-3 MOST IMPORTANT facts that define what this article is about
+3. Select the 2-3 MOST IMPORTANT facts that define what this content is about
 4. Ensure each fact is VERIFIABLE - can be checked against other sources
-5. AVOID thesis statements, interpretations, or opinions
+5. Assess the overall content type and credibility indicators
+6. List all media sources/platforms mentioned
+7. Provide strategic guidance for downstream query generation
 
 VERIFICATION TEST for each fact:
 - Does it contain specific names, dates, places, or numbers? (Must be YES)
@@ -116,10 +129,25 @@ Return your response as valid JSON with this structure:
     "country_code": "XX",
     "language": "primary language",
     "confidence": 0.8
+  }},
+  "broad_context": {{
+    "content_type": "type of content",
+    "credibility_assessment": "your assessment",
+    "reasoning": "brief explanation",
+    "red_flags": ["list of concerning indicators"],
+    "positive_indicators": ["list of credibility boosters"]
+  }},
+  "media_sources": ["list of all media platforms/publications mentioned"],
+  "query_instructions": {{
+    "primary_strategy": "recommended search approach",
+    "suggested_modifiers": ["helpful search terms"],
+    "temporal_guidance": "time-related guidance",
+    "source_priority": ["types of sources to prioritize"],
+    "special_considerations": "any other relevant guidance"
   }}
 }}
 
-Extract the 2-3 most important VERIFIABLE FACTS now."""
+Analyze the content and return valid JSON only."""
 
 
 def get_key_claims_prompts():

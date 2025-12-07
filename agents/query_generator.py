@@ -16,7 +16,7 @@ from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import JsonOutputParser
 from langsmith import traceable
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Any
 from datetime import datetime
 import time
 
@@ -51,6 +51,23 @@ class QueryGeneratorResult(BaseModel):
     fact_id: str
     generated_at: str
 
+class SearchQueries(BaseModel):
+    """Container for all search queries for a fact"""
+    fact_id: str
+    fact_statement: str
+    primary_query: str
+    alternative_queries: List[str]
+    all_queries: List[str]
+    search_focus: str
+    key_terms: List[str]
+    expected_sources: List[str]
+    local_language_used: Optional[str] = None
+    recommended_freshness: Optional[str] = None
+
+    @property
+    def query_count(self) -> int:
+        """Number of queries generated"""
+        return len(self.all_queries)
 
 class QueryGenerator:
     """
@@ -168,27 +185,18 @@ class QueryGenerator:
         self,
         fact,
         context: str = "",
-        content_location: Optional[any] = None,
+        content_location: Optional[Any] = None,
         publication_date: Optional[str] = None,
         # NEW PARAMETERS
-        broad_context: Optional[any] = None,
+        broad_context: Optional[Any] = None,
         media_sources: Optional[List[str]] = None,
-        query_instructions: Optional[any] = None
-    ) -> QueryGeneratorOutput:
+        query_instructions: Optional[Any] = None
+    ) -> 'SearchQueries':  # <-- Note: Returns SearchQueries, not QueryGeneratorOutput
         """
         Generate search queries for a fact
-        
-        Args:
-            fact: Fact object with id and statement
-            context: Additional context string
-            content_location: ContentLocation for multilingual support
-            publication_date: Optional publication date
-            broad_context: BroadContext credibility assessment (NEW)
-            media_sources: List of media sources mentioned (NEW)
-            query_instructions: QueryInstructions for search strategy (NEW)
-            
+
         Returns:
-            QueryGeneratorOutput with generated queries
+            SearchQueries object with all_queries attribute
         """
         start_time = time.time()
         
@@ -204,7 +212,6 @@ class QueryGenerator:
             }
         )
 
-        # Determine if we should use multilingual queries
         use_multilingual = (
             content_location is not None and
             hasattr(content_location, 'language') and
@@ -223,8 +230,21 @@ class QueryGenerator:
                 broad_context, media_sources, query_instructions
             )
 
-        # Build all queries list for logging
+        # === FIX: Combine all queries and return SearchQueries ===
         all_queries = [result.primary_query] + result.alternative_queries
+
+        queries = SearchQueries(
+            fact_id=fact.id,
+            fact_statement=fact.statement,
+            primary_query=result.primary_query,
+            alternative_queries=result.alternative_queries,
+            all_queries=all_queries,  # <-- This is what orchestrator needs
+            search_focus=result.search_focus,
+            key_terms=result.key_terms,
+            expected_sources=result.expected_sources,
+            local_language_used=result.local_language_used,
+            recommended_freshness=result.recommended_freshness  # NEW field
+        )
 
         duration = time.time() - start_time
         fact_logger.logger.info(
@@ -232,20 +252,12 @@ class QueryGenerator:
             extra={
                 "fact_id": fact.id,
                 "duration_seconds": round(duration, 2),
-                "primary_query": result.primary_query,
-                "num_alternatives": len(result.alternative_queries),
-                "search_focus": result.search_focus,
+                "num_queries": len(all_queries),
                 "recommended_freshness": result.recommended_freshness
             }
         )
 
-        # Log all queries for visibility
-        fact_logger.logger.info(f"📋 ALL QUERIES for {fact.id}:")
-        for i, q in enumerate(all_queries, 1):
-            query_type = "PRIMARY" if i == 1 else f"ALT-{i-1}"
-            fact_logger.logger.info(f"   [{query_type}]: {q}")
-
-        return result
+        return queries
 
     @traceable(name="generate_queries_llm", run_type="llm")
     async def _generate_queries_llm(
@@ -253,9 +265,9 @@ class QueryGenerator:
         fact,
         context: str,
         publication_date: Optional[str] = None,
-        broad_context: Optional[any] = None,
+        broad_context: Optional[Any] = None,
         media_sources: Optional[List[str]] = None,
-        query_instructions: Optional[any] = None
+        query_instructions: Optional[Any] = None
     ) -> QueryGeneratorOutput:
         """Generate search queries with enhanced context (English only)"""
         
@@ -326,9 +338,9 @@ class QueryGenerator:
         context: str,
         content_location,
         publication_date: Optional[str] = None,
-        broad_context: Optional[any] = None,
+        broad_context: Optional[Any] = None,
         media_sources: Optional[List[str]] = None,
-        query_instructions: Optional[any] = None
+        query_instructions: Optional[Any] = None
     ) -> QueryGeneratorOutput:
         """Generate multilingual search queries with enhanced context"""
         

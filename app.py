@@ -566,9 +566,11 @@ def scrape_url():
         async def scrape_content():
             scraper = BrowserlessScraper(config)
             try:
-                await scraper.initialize()
-                content = await scraper.scrape_url(url)
-                return content
+                # Initialize browser pool
+                await scraper._initialize_browser_pool()
+                # Scrape using the batch method (takes a list, returns a dict)
+                results = await scraper.scrape_urls_for_facts([url])
+                return results.get(url, "")
             finally:
                 await scraper.close()
 

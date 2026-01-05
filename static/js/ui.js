@@ -120,13 +120,11 @@ function switchMode(mode) {
         inputSectionTitle.textContent = 'Paste Article or Text to Analyze';
         inputHelpText.textContent = 'Paste any article or text to analyze for deception markers';
         publicationField.style.display = 'none';
-        } else if (mode === 'manipulation') {
-            inputSectionTitle.textContent = 'Paste Article for Manipulation Analysis';
-            inputHelpText.textContent = 'Paste any article - we\'ll detect agenda-driven fact manipulation';
-            publicationField.style.display = 'none';
-        }
+    } else if (mode === 'manipulation') {
+        inputSectionTitle.textContent = 'Paste Article for Manipulation Analysis';
+        inputHelpText.textContent = 'Paste any article - we\'ll detect agenda-driven fact manipulation';
+        publicationField.style.display = 'none';
     }
-
     // Clear format indicator when switching modes
     hideContentFormatIndicator();
 }

@@ -141,7 +141,8 @@ function switchResultTab(tab) {
             (tab === 'fact-check' && btn.id === 'factCheckTab') ||
             (tab === 'key-claims' && btn.id === 'keyClaimsTab') ||
             (tab === 'bias-analysis' && btn.id === 'biasAnalysisTab') ||
-            (tab === 'lie-detection' && btn.id === 'lieDetectionTab');
+            (tab === 'lie-detection' && btn.id === 'lieDetectionTab') ||
+            (tab === 'manipulation' && btn.id === 'manipulationTab');
         btn.classList.toggle('active', isActive);
     });
 

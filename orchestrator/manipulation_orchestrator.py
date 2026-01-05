@@ -510,10 +510,22 @@ class ManipulationOrchestrator:
             # Format excerpts for fact checker
             formatted_excerpts = self._format_excerpts_for_checker(all_excerpts)
 
-            # FIX: Use correct method name - fact_checker.check_fact() not verify()
+            # Convert all_excerpts list to the dict format that check_fact expects
+            excerpts_by_url = {}
+            for excerpt in all_excerpts:
+                url = excerpt.get('url', '')
+                if url not in excerpts_by_url:
+                    excerpts_by_url[url] = []
+                excerpts_by_url[url].append({
+                    'quote': excerpt.get('quote', ''),
+                    'relevance': excerpt.get('relevance', 0.5),
+                    'context': excerpt.get('context', ''),
+                    'tier': excerpt.get('tier', 'unknown')
+                })
+
             verification_result = await self.fact_checker.check_fact(
                 fact=fact_obj,
-                excerpts=scraped_content,  # check_fact expects {url: content} dict
+                excerpts=excerpts_by_url,  # Properly formatted: {url: [excerpt_dicts]}
                 source_metadata=source_metadata
             )
 

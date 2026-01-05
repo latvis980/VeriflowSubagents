@@ -5,12 +5,12 @@
 // ============================================================================
 
 function displayManipulationResults() {
-    if (!currentManipulationResults || !currentManipulationResults.success) {
+    if (!AppState.currentManipulationResults || !AppState.currentManipulationResults.success) {
         console.error('No manipulation results to display');
         return;
     }
 
-    const data = currentManipulationResults;
+    const data = AppState.currentManipulationResults;
 
     // ========================================
     // Article Summary Section

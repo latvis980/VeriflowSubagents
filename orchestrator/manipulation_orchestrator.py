@@ -92,7 +92,8 @@ class ManipulationOrchestrator:
         self.query_generator = QueryGenerator(config)
         self.brave_searcher = BraveSearcher(config, max_results=5)
         self.credibility_filter = CredibilityFilter(config)
-        self.scraper = BrowserlessScraper(config)
+        # NOTE: Don't create scraper here - it binds asyncio.Lock to wrong event loop
+        # self.scraper = BrowserlessScraper(config)  
         self.highlighter = Highlighter(config)
         self.fact_checker = FactChecker(config)
 
@@ -214,6 +215,9 @@ class ManipulationOrchestrator:
                 content_country="international",
                 content_language="english"
             )
+
+            # ✅ FIX: Create scraper HERE in the async context (correct event loop)
+            self.scraper = BrowserlessScraper(self.config)
 
             # ================================================================
             # STAGE 3: Fact Verification (using existing pipeline)
@@ -353,17 +357,33 @@ class ManipulationOrchestrator:
                 }
             )
 
+            # Clean up scraper to release browser resources
+            try:
+                await self.scraper.close()
+            except Exception as cleanup_error:
+                fact_logger.logger.debug(f"Scraper cleanup: {cleanup_error}")
+
             return result
 
         except CancelledException:
+            # Clean up on cancellation too
+            try:
+                await self.scraper.close()
+            except Exception:
+                pass
             job_manager.add_progress(job_id, "🛑 Analysis cancelled by user")
             raise
-
+            
         except Exception as e:
             fact_logger.logger.error(f"❌ Pipeline failed: {e}")
             import traceback
             fact_logger.logger.error(f"Traceback: {traceback.format_exc()}")
             job_manager.add_progress(job_id, f"❌ Error: {str(e)}")
+            # ✅ FIX: Clean up scraper on error
+            try:
+                await self.scraper.close()
+            except Exception:
+                pass
             raise
 
     async def _verify_fact(

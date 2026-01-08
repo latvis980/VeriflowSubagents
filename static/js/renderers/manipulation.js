@@ -1,4 +1,37 @@
 // static/js/renderers/manipulation.js - Manipulation Detection Rendering
+// UPDATED: Two-tab layout with Summary (narrative) and Facts (detailed) tabs
+
+// ============================================================================
+// INNER TAB SWITCHING FOR MANIPULATION RESULTS
+// ============================================================================
+
+function initManipulationTabs() {
+    const summaryTab = document.getElementById('manipSummaryTab');
+    const factsTab = document.getElementById('manipFactsTab');
+    const summaryContent = document.getElementById('manipSummaryContent');
+    const factsContent = document.getElementById('manipFactsContent');
+
+    if (summaryTab) {
+        summaryTab.addEventListener('click', () => {
+            summaryTab.classList.add('active');
+            factsTab.classList.remove('active');
+            summaryContent.style.display = 'block';
+            factsContent.style.display = 'none';
+        });
+    }
+
+    if (factsTab) {
+        factsTab.addEventListener('click', () => {
+            factsTab.classList.add('active');
+            summaryTab.classList.remove('active');
+            factsContent.style.display = 'block';
+            summaryContent.style.display = 'none';
+        });
+    }
+}
+
+// Initialize tabs when DOM is ready
+document.addEventListener('DOMContentLoaded', initManipulationTabs);
 
 // ============================================================================
 // DISPLAY MANIPULATION RESULTS
@@ -13,75 +46,14 @@ function displayManipulationResults() {
     const data = AppState.currentManipulationResults;
 
     // ========================================
-    // Article Summary Section
+    // SUMMARY TAB - Score Display
     // ========================================
-    
-    const summarySection = document.getElementById('manipulationSummary');
-    if (summarySection && data.article_summary) {
-        const summary = data.article_summary;
-        
-        // Political lean badge
-        const leanBadge = document.getElementById('manipPoliticalLean');
-        if (leanBadge) {
-            leanBadge.textContent = summary.political_lean;
-            leanBadge.className = `lean-badge lean-${summary.political_lean.replace(/\s+/g, '-').toLowerCase()}`;
-        }
-        
-        // Opinion ratio
-        const ratioElement = document.getElementById('manipOpinionRatio');
-        if (ratioElement) {
-            const percentage = Math.round(summary.opinion_fact_ratio * 100);
-            ratioElement.textContent = `${percentage}% opinion`;
-            ratioElement.className = `ratio-value ${percentage > 60 ? 'high-opinion' : percentage > 30 ? 'medium-opinion' : 'low-opinion'}`;
-        }
-        
-        // Emotional tone
-        const toneElement = document.getElementById('manipEmotionalTone');
-        if (toneElement) {
-            toneElement.textContent = summary.emotional_tone;
-        }
-        
-        // Main thesis
-        const thesisElement = document.getElementById('manipMainThesis');
-        if (thesisElement) {
-            thesisElement.textContent = summary.main_thesis;
-        }
-        
-        // Detected agenda
-        const agendaElement = document.getElementById('manipDetectedAgenda');
-        if (agendaElement) {
-            agendaElement.textContent = summary.detected_agenda;
-        }
-        
-        // Target audience
-        const audienceElement = document.getElementById('manipTargetAudience');
-        if (audienceElement) {
-            audienceElement.textContent = summary.target_audience || 'Not specified';
-        }
-        
-        // Rhetorical strategies
-        const strategiesContainer = document.getElementById('manipRhetoricalStrategies');
-        if (strategiesContainer && summary.rhetorical_strategies) {
-            strategiesContainer.innerHTML = '';
-            summary.rhetorical_strategies.forEach(strategy => {
-                const tag = document.createElement('span');
-                tag.className = 'strategy-tag';
-                tag.textContent = strategy;
-                strategiesContainer.appendChild(tag);
-            });
-        }
-    }
 
-    // ========================================
-    // Manipulation Score Section
-    // ========================================
-    
     const scoreElement = document.getElementById('manipulationScore');
     if (scoreElement) {
         const score = data.manipulation_score || 0;
         scoreElement.textContent = score.toFixed(1);
-        
-        // Color coding based on score
+
         let scoreClass = 'score-low';
         if (score >= 7) {
             scoreClass = 'score-high';
@@ -90,13 +62,20 @@ function displayManipulationResults() {
         }
         scoreElement.className = `manipulation-score-value ${scoreClass}`;
     }
-    
-    // Score justification
-    const justificationElement = document.getElementById('manipScoreJustification');
-    if (justificationElement && data.report) {
-        justificationElement.textContent = data.report.justification || '';
+
+    // Score Label
+    const scoreLabelElement = document.getElementById('manipScoreLabel');
+    if (scoreLabelElement) {
+        const score = data.manipulation_score || 0;
+        let label = 'Low Manipulation';
+        if (score >= 7) {
+            label = 'High Manipulation';
+        } else if (score >= 4) {
+            label = 'Moderate Manipulation';
+        }
+        scoreLabelElement.textContent = label;
     }
-    
+
     // Confidence
     const confidenceElement = document.getElementById('manipConfidence');
     if (confidenceElement && data.report) {
@@ -105,33 +84,155 @@ function displayManipulationResults() {
     }
 
     // ========================================
-    // Techniques Used Section
+    // Narrative Summary (Main Human-like Analysis)
     // ========================================
-    
-    const techniquesContainer = document.getElementById('manipTechniquesUsed');
-    if (techniquesContainer && data.report && data.report.techniques_used) {
-        techniquesContainer.innerHTML = '';
-        
-        if (data.report.techniques_used.length === 0) {
-            techniquesContainer.innerHTML = '<p class="no-techniques">✅ No manipulation techniques detected</p>';
+
+    const narrativeContainer = document.getElementById('manipNarrativeSummary');
+    if (narrativeContainer) {
+        // Use backend-generated narrative if available, otherwise generate one
+        let narrative = '';
+        if (data.report && data.report.narrative_summary) {
+            narrative = data.report.narrative_summary;
         } else {
-            data.report.techniques_used.forEach(technique => {
-                const chip = document.createElement('span');
-                chip.className = 'technique-chip';
-                chip.textContent = formatTechniqueName(technique);
-                techniquesContainer.appendChild(chip);
-            });
+            narrative = generateNarrativeSummary(data);
+        }
+        narrativeContainer.innerHTML = `<p class="narrative-text">${escapeHtml(narrative)}</p>`;
+    }
+
+    // Quick Meta Info (compact display)
+    const metaContainer = document.getElementById('manipQuickMeta');
+    if (metaContainer && data.article_summary) {
+        const summary = data.article_summary;
+        metaContainer.innerHTML = `
+            <span class="meta-chip lean-${(summary.political_lean || '').replace(/\s+/g, '-').toLowerCase()}">
+                <strong>Lean:</strong> ${escapeHtml(summary.political_lean || 'Unknown')}
+            </span>
+            <span class="meta-chip">
+                <strong>Tone:</strong> ${escapeHtml(summary.emotional_tone || 'Unknown')}
+            </span>
+            <span class="meta-chip">
+                <strong>Opinion:</strong> ${Math.round((summary.opinion_fact_ratio || 0) * 100)}%
+            </span>
+        `;
+    }
+
+    // Techniques Used (compact list in summary)
+    const techniquesSummary = document.getElementById('manipTechniquesSummary');
+    if (techniquesSummary && data.report && data.report.techniques_used) {
+        if (data.report.techniques_used.length === 0) {
+            techniquesSummary.innerHTML = '<span class="no-techniques-inline">✅ No manipulation techniques detected</span>';
+        } else {
+            techniquesSummary.innerHTML = data.report.techniques_used
+                .map(t => `<span class="technique-chip-small">${formatTechniqueName(t)}</span>`)
+                .join('');
         }
     }
 
+    // Key Takeaways (What Got Right + Misleading - combined in summary)
+    const takeawaysContainer = document.getElementById('manipKeyTakeaways');
+    if (takeawaysContainer && data.report) {
+        let takeawaysHTML = '';
+
+        // What's accurate
+        if (data.report.what_got_right && data.report.what_got_right.length > 0) {
+            takeawaysHTML += '<div class="takeaway-section takeaway-positive">';
+            takeawaysHTML += '<strong>✅ What\'s accurate:</strong> ';
+            takeawaysHTML += data.report.what_got_right.slice(0, 2).map(item => escapeHtml(item)).join('; ');
+            if (data.report.what_got_right.length > 2) {
+                takeawaysHTML += ` <em>(+${data.report.what_got_right.length - 2} more in Facts tab)</em>`;
+            }
+            takeawaysHTML += '</div>';
+        }
+
+        // What's misleading
+        if (data.report.misleading_elements && data.report.misleading_elements.length > 0) {
+            takeawaysHTML += '<div class="takeaway-section takeaway-warning">';
+            takeawaysHTML += '<strong>⚠️ Watch out for:</strong> ';
+            takeawaysHTML += data.report.misleading_elements.slice(0, 2).map(item => escapeHtml(item)).join('; ');
+            if (data.report.misleading_elements.length > 2) {
+                takeawaysHTML += ` <em>(+${data.report.misleading_elements.length - 2} more in Facts tab)</em>`;
+            }
+            takeawaysHTML += '</div>';
+        }
+
+        takeawaysContainer.innerHTML = takeawaysHTML || '<p class="no-takeaways">No specific takeaways identified</p>';
+    }
+
+    // Recommendation
+    const recommendationElement = document.getElementById('manipRecommendationSummary');
+    if (recommendationElement && data.report && data.report.recommendation) {
+        recommendationElement.textContent = data.report.recommendation;
+    }
+
     // ========================================
+    // FACTS TAB - Detailed Analysis
+    // ========================================
+
+    // Article Summary Section (detailed in facts tab)
+    const summarySection = document.getElementById('manipArticleSummaryDetailed');
+    if (summarySection && data.article_summary) {
+        const summary = data.article_summary;
+
+        let detailsHTML = `
+            <div class="summary-detail-grid">
+                <div class="detail-item">
+                    <span class="detail-label">Political Lean</span>
+                    <span class="lean-badge lean-${(summary.political_lean || '').replace(/\s+/g, '-').toLowerCase()}">${escapeHtml(summary.political_lean || 'Unknown')}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Opinion Ratio</span>
+                    <span class="ratio-value">${Math.round((summary.opinion_fact_ratio || 0) * 100)}% opinion</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Emotional Tone</span>
+                    <span>${escapeHtml(summary.emotional_tone || 'Unknown')}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Target Audience</span>
+                    <span>${escapeHtml(summary.target_audience || 'Not specified')}</span>
+                </div>
+            </div>
+            <div class="summary-detail-section">
+                <strong>Main Thesis:</strong>
+                <p>${escapeHtml(summary.main_thesis || 'Not identified')}</p>
+            </div>
+            <div class="summary-detail-section">
+                <strong>Detected Agenda:</strong>
+                <p>${escapeHtml(summary.detected_agenda || 'Not identified')}</p>
+            </div>
+        `;
+
+        if (summary.rhetorical_strategies && summary.rhetorical_strategies.length > 0) {
+            detailsHTML += `
+                <div class="summary-detail-section">
+                    <strong>Rhetorical Strategies:</strong>
+                    <div class="strategies-container">
+                        ${summary.rhetorical_strategies.map(s => `<span class="strategy-tag">${escapeHtml(s)}</span>`).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        summarySection.innerHTML = detailsHTML;
+    }
+
+    // Techniques Used (detailed in facts tab)
+    const techniquesDetailed = document.getElementById('manipTechniquesDetailed');
+    if (techniquesDetailed && data.report && data.report.techniques_used) {
+        if (data.report.techniques_used.length === 0) {
+            techniquesDetailed.innerHTML = '<p class="no-techniques">✅ No manipulation techniques detected</p>';
+        } else {
+            techniquesDetailed.innerHTML = data.report.techniques_used
+                .map(technique => `<span class="technique-chip">${formatTechniqueName(technique)}</span>`)
+                .join('');
+        }
+    }
+
     // Facts Analysis Section
-    // ========================================
-    
     const factsContainer = document.getElementById('manipFactsList');
     if (factsContainer && data.manipulation_findings) {
         factsContainer.innerHTML = '';
-        
+
         if (data.manipulation_findings.length === 0) {
             factsContainer.innerHTML = '<p class="no-facts">No facts were analyzed</p>';
         } else {
@@ -142,15 +243,11 @@ function displayManipulationResults() {
         }
     }
 
-    // ========================================
-    // What Got Right / Misleading Elements
-    // ========================================
-    
-    // What the article got right
+    // What Got Right (detailed)
     const rightContainer = document.getElementById('manipWhatGotRight');
     if (rightContainer && data.report && data.report.what_got_right) {
         rightContainer.innerHTML = '';
-        
+
         if (data.report.what_got_right.length === 0) {
             rightContainer.innerHTML = '<p class="empty-list">No positive elements identified</p>';
         } else {
@@ -164,12 +261,12 @@ function displayManipulationResults() {
             rightContainer.appendChild(list);
         }
     }
-    
-    // Misleading elements
+
+    // Misleading elements (detailed)
     const misleadingContainer = document.getElementById('manipMisleadingElements');
     if (misleadingContainer && data.report && data.report.misleading_elements) {
         misleadingContainer.innerHTML = '';
-        
+
         if (data.report.misleading_elements.length === 0) {
             misleadingContainer.innerHTML = '<p class="empty-list">No misleading elements identified</p>';
         } else {
@@ -184,31 +281,26 @@ function displayManipulationResults() {
         }
     }
 
-    // ========================================
-    // Recommendation Section
-    // ========================================
-    
-    const recommendationElement = document.getElementById('manipRecommendation');
-    if (recommendationElement && data.report) {
-        recommendationElement.textContent = data.report.recommendation || '';
+    // Recommendation (detailed)
+    const recommendationDetailed = document.getElementById('manipRecommendationDetailed');
+    if (recommendationDetailed && data.report && data.report.recommendation) {
+        recommendationDetailed.textContent = data.report.recommendation;
     }
 
-    // ========================================
     // Session Info
-    // ========================================
-    
     const sessionIdElement = document.getElementById('manipSessionId');
     if (sessionIdElement) {
         sessionIdElement.textContent = data.session_id || '-';
     }
-    
+
     const processingTimeElement = document.getElementById('manipProcessingTime');
     if (processingTimeElement) {
-        const time = data.processing_time || 0;
-        processingTimeElement.textContent = `${time.toFixed(1)}s`;
+        processingTimeElement.textContent = data.processing_time 
+            ? `${data.processing_time.toFixed(1)}s` 
+            : '-';
     }
-    
-    // R2 link
+
+    // R2 Link
     const r2Link = document.getElementById('manipR2Link');
     const r2Sep = document.getElementById('manipR2Sep');
     if (r2Link && data.r2_url) {
@@ -219,74 +311,143 @@ function displayManipulationResults() {
         r2Link.style.display = 'none';
         if (r2Sep) r2Sep.style.display = 'none';
     }
+
+    // Show summary tab by default
+    const summaryTab = document.getElementById('manipSummaryTab');
+    const factsTab = document.getElementById('manipFactsTab');
+    const summaryContent = document.getElementById('manipSummaryContent');
+    const factsContent = document.getElementById('manipFactsContent');
+
+    if (summaryTab) summaryTab.classList.add('active');
+    if (factsTab) factsTab.classList.remove('active');
+    if (summaryContent) summaryContent.style.display = 'block';
+    if (factsContent) factsContent.style.display = 'none';
 }
 
+// ============================================================================
+// GENERATE NARRATIVE SUMMARY (Fallback if backend doesn't provide one)
+// ============================================================================
+
+function generateNarrativeSummary(data) {
+    const score = data.manipulation_score || 0;
+    const summary = data.article_summary || {};
+    const report = data.report || {};
+
+    let narrative = '';
+
+    // Opening based on score
+    if (score >= 7) {
+        narrative = `This article shows significant signs of manipulation. `;
+    } else if (score >= 4) {
+        narrative = `This article contains some elements that could be considered manipulative. `;
+    } else {
+        narrative = `This article appears to be relatively balanced in its presentation. `;
+    }
+
+    // Add political lean context
+    if (summary.political_lean && summary.political_lean.toLowerCase() !== 'center') {
+        narrative += `The content leans ${summary.political_lean.toLowerCase()}, `;
+    }
+
+    // Add thesis and agenda
+    if (summary.main_thesis) {
+        narrative += `with a central argument that ${summary.main_thesis.toLowerCase().replace(/\.$/, '')}. `;
+    }
+
+    if (summary.detected_agenda) {
+        narrative += `The underlying agenda appears to be: ${summary.detected_agenda.toLowerCase().replace(/\.$/, '')}. `;
+    }
+
+    // Techniques summary
+    if (report.techniques_used && report.techniques_used.length > 0) {
+        const techniqueNames = report.techniques_used.slice(0, 3).map(t => formatTechniqueName(t).toLowerCase());
+        narrative += `Key techniques used include ${techniqueNames.join(', ')}. `;
+    }
+
+    // Add justification if available
+    if (report.justification) {
+        narrative += report.justification;
+    }
+
+    return narrative;
+}
 
 // ============================================================================
-// HELPER FUNCTIONS
+// CREATE MANIPULATION FACT CARD
 // ============================================================================
 
 function createManipulationFactCard(finding) {
     const card = document.createElement('div');
-    card.className = `manipulation-fact-card ${finding.manipulation_detected ? 'has-manipulation' : 'no-manipulation'}`;
-    
-    // Header with fact ID and severity
-    const header = document.createElement('div');
-    header.className = 'fact-card-header';
-    
-    const factId = document.createElement('span');
-    factId.className = 'fact-id';
-    factId.textContent = finding.fact_id;
-    header.appendChild(factId);
-    
+    card.className = 'manipulation-fact-card';
+
+    // Determine status class and header
+    let statusClass = 'status-neutral';
+    let statusIcon = '📋';
+    let statusLabel = 'Analyzed';
+
     if (finding.manipulation_detected) {
-        const severityBadge = document.createElement('span');
-        severityBadge.className = `severity-badge severity-${finding.manipulation_severity}`;
-        severityBadge.textContent = `${finding.manipulation_severity.toUpperCase()} MANIPULATION`;
-        header.appendChild(severityBadge);
-    } else {
-        const okBadge = document.createElement('span');
-        okBadge.className = 'severity-badge severity-none';
-        okBadge.textContent = 'NO MANIPULATION';
-        header.appendChild(okBadge);
+        statusClass = 'status-manipulated';
+        statusIcon = '⚠️';
+        statusLabel = 'Manipulation Detected';
+    } else if (finding.truthfulness === 'TRUE') {
+        statusClass = 'status-verified';
+        statusIcon = '✅';
+        statusLabel = 'Verified True';
+    } else if (finding.truthfulness === 'FALSE') {
+        statusClass = 'status-false';
+        statusIcon = '❌';
+        statusLabel = 'False';
+    } else if (finding.truthfulness === 'PARTIALLY_TRUE') {
+        statusClass = 'status-partial';
+        statusIcon = '⚡';
+        statusLabel = 'Partially True';
     }
-    
+
+    card.classList.add(statusClass);
+
+    // Header row
+    const header = document.createElement('div');
+    header.className = 'fact-header';
+    header.innerHTML = `
+        <span class="fact-id">${escapeHtml(finding.fact_id || '')}</span>
+        <span class="fact-status-badge ${statusClass}">${statusIcon} ${statusLabel}</span>
+    `;
     card.appendChild(header);
-    
+
     // Fact statement
     const statement = document.createElement('div');
     statement.className = 'fact-statement';
-    statement.textContent = finding.fact_statement;
+    statement.innerHTML = `<strong>Claim:</strong> ${escapeHtml(finding.fact_statement || '')}`;
     card.appendChild(statement);
-    
+
     // Truthfulness row
     const truthRow = document.createElement('div');
     truthRow.className = 'fact-truth-row';
-    
+
     const truthLabel = document.createElement('span');
     truthLabel.className = 'truth-label';
-    truthLabel.textContent = 'Truthfulness:';
+    truthLabel.textContent = 'Truthfulness: ';
     truthRow.appendChild(truthLabel);
-    
+
     const truthValue = document.createElement('span');
-    truthValue.className = `truth-value truth-${finding.truthfulness.toLowerCase().replace('_', '-')}`;
-    truthValue.textContent = `${finding.truthfulness} (${(finding.truth_score * 100).toFixed(0)}%)`;
+    truthValue.className = `truth-value truth-${(finding.truthfulness || '').toLowerCase().replace('_', '-')}`;
+    truthValue.textContent = `${finding.truthfulness || 'Unknown'} (${((finding.truth_score || 0) * 100).toFixed(0)}%)`;
     truthRow.appendChild(truthValue);
-    
+
     card.appendChild(truthRow);
-    
+
     // If manipulation detected, show details
     if (finding.manipulation_detected) {
         // Manipulation types
         if (finding.manipulation_types && finding.manipulation_types.length > 0) {
             const typesRow = document.createElement('div');
             typesRow.className = 'manipulation-types-row';
-            
+
             const typesLabel = document.createElement('span');
             typesLabel.className = 'types-label';
             typesLabel.textContent = 'Manipulation types:';
             typesRow.appendChild(typesLabel);
-            
+
             const typesContainer = document.createElement('div');
             typesContainer.className = 'types-container';
             finding.manipulation_types.forEach(type => {
@@ -296,20 +457,20 @@ function createManipulationFactCard(finding) {
                 typesContainer.appendChild(chip);
             });
             typesRow.appendChild(typesContainer);
-            
+
             card.appendChild(typesRow);
         }
-        
+
         // What was omitted
         if (finding.what_was_omitted && finding.what_was_omitted.length > 0) {
             const omittedSection = document.createElement('div');
             omittedSection.className = 'omitted-section';
-            
+
             const omittedLabel = document.createElement('div');
             omittedLabel.className = 'omitted-label';
             omittedLabel.textContent = '📌 Context that was omitted:';
             omittedSection.appendChild(omittedLabel);
-            
+
             const omittedList = document.createElement('ul');
             omittedList.className = 'omitted-list';
             finding.what_was_omitted.forEach(item => {
@@ -318,56 +479,56 @@ function createManipulationFactCard(finding) {
                 omittedList.appendChild(li);
             });
             omittedSection.appendChild(omittedList);
-            
+
             card.appendChild(omittedSection);
         }
-        
+
         // How it serves agenda
         if (finding.how_it_serves_agenda) {
             const agendaSection = document.createElement('div');
             agendaSection.className = 'agenda-section';
-            
+
             const agendaLabel = document.createElement('div');
             agendaLabel.className = 'agenda-label';
             agendaLabel.textContent = '🎯 How it serves the agenda:';
             agendaSection.appendChild(agendaLabel);
-            
+
             const agendaText = document.createElement('p');
             agendaText.className = 'agenda-text';
             agendaText.textContent = finding.how_it_serves_agenda;
             agendaSection.appendChild(agendaText);
-            
+
             card.appendChild(agendaSection);
         }
-        
+
         // Corrected context
         if (finding.corrected_context) {
             const correctedSection = document.createElement('div');
             correctedSection.className = 'corrected-section';
-            
+
             const correctedLabel = document.createElement('div');
             correctedLabel.className = 'corrected-label';
             correctedLabel.textContent = '✅ Corrected understanding:';
             correctedSection.appendChild(correctedLabel);
-            
+
             const correctedText = document.createElement('p');
             correctedText.className = 'corrected-text';
             correctedText.textContent = finding.corrected_context;
             correctedSection.appendChild(correctedText);
-            
+
             card.appendChild(correctedSection);
         }
     }
-    
+
     // Sources used (collapsible)
     if (finding.sources_used && finding.sources_used.length > 0) {
         const sourcesSection = document.createElement('details');
         sourcesSection.className = 'sources-section';
-        
+
         const sourcesSummary = document.createElement('summary');
         sourcesSummary.textContent = `📚 Sources used (${finding.sources_used.length})`;
         sourcesSection.appendChild(sourcesSummary);
-        
+
         const sourcesList = document.createElement('ul');
         sourcesList.className = 'sources-list';
         finding.sources_used.forEach(url => {
@@ -380,14 +541,19 @@ function createManipulationFactCard(finding) {
             sourcesList.appendChild(li);
         });
         sourcesSection.appendChild(sourcesList);
-        
+
         card.appendChild(sourcesSection);
     }
-    
+
     return card;
 }
 
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
 function formatTechniqueName(technique) {
+    if (!technique) return '';
     // Convert snake_case or lowercase to Title Case
     return technique
         .replace(/_/g, ' ')
@@ -408,6 +574,7 @@ function truncateUrl(url) {
 }
 
 function escapeHtml(text) {
+    if (!text) return '';
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
@@ -421,10 +588,10 @@ function escapeHtml(text) {
 function renderManipulationGauge(score, containerId) {
     const container = document.getElementById(containerId);
     if (!container) return;
-    
+
     // Calculate rotation (0-10 maps to -90 to 90 degrees)
     const rotation = (score / 10) * 180 - 90;
-    
+
     // Determine color based on score
     let color = '#22c55e'; // green
     if (score >= 7) {
@@ -432,7 +599,7 @@ function renderManipulationGauge(score, containerId) {
     } else if (score >= 4) {
         color = '#f59e0b'; // amber
     }
-    
+
     container.innerHTML = `
         <div class="gauge-container">
             <svg viewBox="0 0 100 60" class="gauge-svg">

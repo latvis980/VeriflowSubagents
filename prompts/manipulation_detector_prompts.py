@@ -8,6 +8,8 @@ This mode combines:
 - Fact extraction with framing analysis
 - Fact verification (via web search)
 - Manipulation analysis (comparing facts to their presentation)
+
+UPDATED: Added narrative_summary field to report synthesis
 """
 
 # ============================================================================
@@ -256,6 +258,7 @@ Your task is to synthesize a comprehensive, balanced report that:
 - Highlights what the article got RIGHT (fair points)
 - Clearly explains what was MISLEADING and how
 - Provides a balanced recommendation for readers
+- Creates a NARRATIVE SUMMARY for general readers
 
 SCORING GUIDELINES (0-10):
 - 0-2: Minimal manipulation, factually sound, balanced reporting
@@ -269,6 +272,11 @@ BE BALANCED:
 - Don't assume all bias is intentional manipulation
 - Distinguish between opinion pieces (expected bias) and news reporting
 - Note if manipulation serves any political direction
+
+NARRATIVE SUMMARY:
+Write a 2-4 sentence human-readable paragraph that summarizes your findings in natural language, 
+suitable for a general reader. Write it as if you're explaining to a friend what you found. 
+Avoid jargon, bullet points, and technical terms. Make it conversational and easy to understand.
 
 IMPORTANT: Return ONLY valid JSON. No other text or explanations."""
 
@@ -295,6 +303,11 @@ Create a comprehensive report including:
 5. How manipulations serve the detected agenda
 6. Reader recommendation (how to interpret this content)
 7. Confidence level in your analysis
+8. NARRATIVE SUMMARY: A 2-4 sentence conversational paragraph summarizing your findings for a general reader. 
+   Write it naturally, as if explaining to a friend. Example: "This article shows some concerning patterns 
+   in how it presents economic data. While the core statistics are accurate, the piece selectively highlights 
+   negative figures while downplaying positive ones. The emotional language used throughout suggests an intent 
+   to alarm rather than inform. Readers should cross-reference with neutral sources."
 
 {format_instructions}
 

@@ -3282,3 +3282,846 @@ footer a:hover {
     margin-top: -0.5rem;
     padding: 0 0.5rem;
 }
+
+/* ============================================================================
+   MANIPULATION MODE - Two-Tab Layout CSS
+   Add these styles to your static/style.css file
+   ============================================================================ */
+
+/* ============================================
+   INNER TABS (Summary | Facts)
+   ============================================ */
+
+.manip-inner-tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 1.5rem;
+    border-bottom: 2px solid #e2e8f0;
+}
+
+.manip-tab {
+    padding: 0.75rem 1.5rem;
+    background: transparent;
+    border: none;
+    border-bottom: 3px solid transparent;
+    color: #64748b;
+    font-weight: 500;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-bottom: -2px;
+}
+
+.manip-tab:hover {
+    color: #8b5cf6;
+    background: #faf5ff;
+}
+
+.manip-tab.active {
+    color: #8b5cf6;
+    border-bottom-color: #8b5cf6;
+    background: linear-gradient(180deg, transparent 0%, #faf5ff 100%);
+}
+
+.manip-tab-content {
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* ============================================
+   SUMMARY TAB - Score Header
+   ============================================ */
+
+.manipulation-score-header {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    padding: 1.5rem;
+    background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%);
+    border-radius: 12px;
+    margin-bottom: 1.5rem;
+    border: 1px solid #e9d5ff;
+}
+
+.score-circle {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: white;
+    box-shadow: 0 4px 12px rgba(139, 92, 246, 0.15);
+}
+
+.manipulation-score-value {
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.manipulation-score-value.score-low {
+    color: #16a34a;
+}
+
+.manipulation-score-value.score-medium {
+    color: #eab308;
+}
+
+.manipulation-score-value.score-high {
+    color: #dc2626;
+}
+
+.score-max {
+    font-size: 0.75rem;
+    color: #64748b;
+}
+
+.score-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.score-label {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.confidence-badge {
+    font-size: 0.85rem;
+    color: #64748b;
+}
+
+/* ============================================
+   SUMMARY TAB - Quick Meta Row
+   ============================================ */
+
+.quick-meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+
+.meta-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: #f1f5f9;
+    border-radius: 20px;
+    font-size: 0.9rem;
+    color: #475569;
+}
+
+.meta-chip strong {
+    color: #1e293b;
+}
+
+/* Political lean colors for meta chips */
+.meta-chip.lean-left,
+.meta-chip.lean-left-leaning,
+.meta-chip.lean-center-left {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.meta-chip.lean-right,
+.meta-chip.lean-right-leaning,
+.meta-chip.lean-center-right {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.meta-chip.lean-center {
+    background: #f3f4f6;
+    color: #4b5563;
+}
+
+.meta-chip.lean-far-left {
+    background: #bfdbfe;
+    color: #1e40af;
+}
+
+.meta-chip.lean-far-right {
+    background: #fecaca;
+    color: #991b1b;
+}
+
+/* ============================================
+   SUMMARY TAB - Narrative Section
+   ============================================ */
+
+.narrative-section {
+    margin-bottom: 1.5rem;
+}
+
+.narrative-section h4 {
+    font-size: 1rem;
+    color: #1e293b;
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.narrative-container {
+    padding: 1.25rem;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    border-left: 4px solid #8b5cf6;
+}
+
+.narrative-text {
+    font-size: 1rem;
+    line-height: 1.7;
+    color: #334155;
+    margin: 0;
+}
+
+/* ============================================
+   SUMMARY TAB - Techniques (compact)
+   ============================================ */
+
+.techniques-summary-section {
+    margin-bottom: 1.5rem;
+}
+
+.techniques-summary-section h4 {
+    font-size: 1rem;
+    color: #1e293b;
+    margin-bottom: 0.75rem;
+}
+
+.techniques-compact {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.technique-chip-small {
+    display: inline-block;
+    padding: 0.35rem 0.75rem;
+    background: #fef3c7;
+    color: #92400e;
+    border-radius: 15px;
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.no-techniques-inline {
+    color: #16a34a;
+    font-size: 0.95rem;
+}
+
+/* ============================================
+   SUMMARY TAB - Key Takeaways
+   ============================================ */
+
+.takeaways-section {
+    margin-bottom: 1.5rem;
+}
+
+.takeaways-section h4 {
+    font-size: 1rem;
+    color: #1e293b;
+    margin-bottom: 0.75rem;
+}
+
+.takeaways-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.takeaway-section {
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    line-height: 1.5;
+}
+
+.takeaway-positive {
+    background: #ecfdf5;
+    border-left: 3px solid #10b981;
+    color: #065f46;
+}
+
+.takeaway-warning {
+    background: #fffbeb;
+    border-left: 3px solid #f59e0b;
+    color: #92400e;
+}
+
+.takeaway-section em {
+    opacity: 0.7;
+}
+
+.no-takeaways {
+    color: #64748b;
+    font-style: italic;
+}
+
+/* ============================================
+   SUMMARY TAB - Recommendation
+   ============================================ */
+
+.recommendation-summary {
+    margin-bottom: 1.5rem;
+}
+
+.recommendation-summary h4 {
+    font-size: 1rem;
+    color: #1e293b;
+    margin-bottom: 0.75rem;
+}
+
+.recommendation-summary .recommendation-text {
+    padding: 1rem;
+    background: #f0f9ff;
+    border-radius: 8px;
+    border-left: 3px solid #3b82f6;
+    color: #1e40af;
+    font-size: 0.95rem;
+    line-height: 1.6;
+    margin: 0;
+}
+
+/* ============================================
+   SUMMARY TAB - View Details Prompt
+   ============================================ */
+
+.view-details-prompt {
+    padding: 1rem;
+    background: #f8fafc;
+    border-radius: 8px;
+    text-align: center;
+    color: #64748b;
+    font-size: 0.9rem;
+    border: 1px dashed #cbd5e1;
+}
+
+.view-details-prompt strong {
+    color: #8b5cf6;
+}
+
+/* ============================================
+   FACTS TAB - Article Summary Detailed
+   ============================================ */
+
+.article-summary-detailed {
+    margin-bottom: 1.5rem;
+    padding: 1.25rem;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+}
+
+.article-summary-detailed h4 {
+    font-size: 1rem;
+    color: #1e293b;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.summary-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.detail-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.detail-label {
+    font-size: 0.85rem;
+    color: #64748b;
+    font-weight: 500;
+}
+
+.summary-detail-section {
+    margin-top: 1rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #f1f5f9;
+}
+
+.summary-detail-section strong {
+    color: #1e293b;
+    font-size: 0.9rem;
+}
+
+.summary-detail-section p {
+    margin: 0.5rem 0 0 0;
+    color: #475569;
+    line-height: 1.5;
+}
+
+.strategies-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.strategy-tag {
+    display: inline-block;
+    padding: 0.35rem 0.75rem;
+    background: #ede9fe;
+    color: #6d28d9;
+    border-radius: 15px;
+    font-size: 0.85rem;
+}
+
+/* ============================================
+   FACTS TAB - Lean Badge
+   ============================================ */
+
+.lean-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 15px;
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.lean-left,
+.lean-left-leaning,
+.lean-center-left {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.lean-right,
+.lean-right-leaning,
+.lean-center-right {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.lean-center {
+    background: #f3f4f6;
+    color: #4b5563;
+}
+
+.lean-far-left {
+    background: #bfdbfe;
+    color: #1e40af;
+}
+
+.lean-far-right {
+    background: #fecaca;
+    color: #991b1b;
+}
+
+/* ============================================
+   FACTS TAB - Facts Section
+   ============================================ */
+
+.manipulation-facts-section {
+    margin-bottom: 1.5rem;
+}
+
+.manipulation-facts-section h4 {
+    font-size: 1rem;
+    color: #1e293b;
+    margin-bottom: 0.5rem;
+}
+
+.facts-section-desc {
+    font-size: 0.9rem;
+    color: #64748b;
+    margin-bottom: 1rem;
+}
+
+/* ============================================
+   FACTS TAB - Fact Cards
+   ============================================ */
+
+.manipulation-fact-card {
+    padding: 1.25rem;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    margin-bottom: 1rem;
+    transition: box-shadow 0.2s ease;
+}
+
+.manipulation-fact-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.manipulation-fact-card.status-manipulated {
+    border-left: 4px solid #f59e0b;
+}
+
+.manipulation-fact-card.status-verified {
+    border-left: 4px solid #10b981;
+}
+
+.manipulation-fact-card.status-false {
+    border-left: 4px solid #ef4444;
+}
+
+.manipulation-fact-card.status-partial {
+    border-left: 4px solid #6366f1;
+}
+
+.manipulation-fact-card.status-neutral {
+    border-left: 4px solid #94a3b8;
+}
+
+.fact-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+}
+
+.fact-id {
+    font-weight: 600;
+    color: #64748b;
+    font-size: 0.9rem;
+}
+
+.fact-status-badge {
+    font-size: 0.85rem;
+    font-weight: 500;
+    padding: 0.25rem 0.75rem;
+    border-radius: 15px;
+}
+
+.fact-status-badge.status-manipulated {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.fact-status-badge.status-verified {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.fact-status-badge.status-false {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.fact-status-badge.status-partial {
+    background: #e0e7ff;
+    color: #3730a3;
+}
+
+.fact-status-badge.status-neutral {
+    background: #f1f5f9;
+    color: #475569;
+}
+
+.fact-statement {
+    margin-bottom: 0.75rem;
+    line-height: 1.5;
+    color: #1e293b;
+}
+
+.fact-truth-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.9rem;
+}
+
+.truth-label {
+    color: #64748b;
+}
+
+.truth-value {
+    font-weight: 500;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+}
+
+.truth-value.truth-true {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.truth-value.truth-false {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.truth-value.truth-partially-true {
+    background: #e0e7ff;
+    color: #3730a3;
+}
+
+.truth-value.truth-unverifiable {
+    background: #f1f5f9;
+    color: #475569;
+}
+
+.manipulation-types-row {
+    margin-bottom: 0.75rem;
+}
+
+.types-label {
+    font-size: 0.85rem;
+    color: #64748b;
+    display: block;
+    margin-bottom: 0.5rem;
+}
+
+.types-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.type-chip {
+    display: inline-block;
+    padding: 0.25rem 0.6rem;
+    background: #fef3c7;
+    color: #92400e;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.omitted-section,
+.agenda-section,
+.corrected-section {
+    margin-top: 0.75rem;
+    padding: 0.75rem;
+    border-radius: 8px;
+    font-size: 0.9rem;
+}
+
+.omitted-section {
+    background: #fff7ed;
+    border-left: 3px solid #f97316;
+}
+
+.agenda-section {
+    background: #fef3c7;
+    border-left: 3px solid #f59e0b;
+}
+
+.corrected-section {
+    background: #ecfdf5;
+    border-left: 3px solid #10b981;
+}
+
+.omitted-label,
+.agenda-label,
+.corrected-label {
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    font-size: 0.85rem;
+}
+
+.omitted-list {
+    margin: 0.5rem 0 0 1.25rem;
+    padding: 0;
+}
+
+.omitted-list li {
+    margin-bottom: 0.25rem;
+    color: #92400e;
+}
+
+.agenda-text,
+.corrected-text {
+    margin: 0;
+    line-height: 1.5;
+}
+
+.sources-section {
+    margin-top: 0.75rem;
+    font-size: 0.85rem;
+}
+
+.sources-section summary {
+    cursor: pointer;
+    color: #64748b;
+    padding: 0.5rem 0;
+}
+
+.sources-section summary:hover {
+    color: #3b82f6;
+}
+
+.sources-list {
+    margin: 0.5rem 0 0 1.25rem;
+    padding: 0;
+}
+
+.sources-list li {
+    margin-bottom: 0.25rem;
+}
+
+.sources-list a {
+    color: #3b82f6;
+    text-decoration: none;
+}
+
+.sources-list a:hover {
+    text-decoration: underline;
+}
+
+/* ============================================
+   FACTS TAB - Balanced Assessment
+   ============================================ */
+
+.balanced-assessment {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+@media (max-width: 768px) {
+    .balanced-assessment {
+        grid-template-columns: 1fr;
+    }
+}
+
+.got-right-card,
+.misleading-card {
+    padding: 1rem;
+    border-radius: 10px;
+}
+
+.got-right-card {
+    background: #ecfdf5;
+    border: 1px solid #a7f3d0;
+}
+
+.got-right-card h4 {
+    color: #065f46;
+    margin-bottom: 0.75rem;
+    font-size: 0.95rem;
+}
+
+.misleading-card {
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+}
+
+.misleading-card h4 {
+    color: #92400e;
+    margin-bottom: 0.75rem;
+    font-size: 0.95rem;
+}
+
+.got-right-list,
+.misleading-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.got-right-list li,
+.misleading-list li {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.95rem;
+    line-height: 1.4;
+}
+
+.check-icon {
+    color: #10b981;
+    font-weight: bold;
+}
+
+.warning-icon {
+    color: #f59e0b;
+}
+
+.empty-list {
+    color: #64748b;
+    font-size: 0.9rem;
+    font-style: italic;
+}
+
+/* ============================================
+   FACTS TAB - Recommendation Card
+   ============================================ */
+
+.recommendation-card {
+    padding: 1.25rem;
+    background: #f0f9ff;
+    border: 1px solid #bae6fd;
+    border-radius: 10px;
+    margin-bottom: 1.5rem;
+}
+
+.recommendation-card h4 {
+    color: #0369a1;
+    margin-bottom: 0.75rem;
+    font-size: 0.95rem;
+}
+
+.recommendation-card .recommendation-text {
+    color: #1e40af;
+    font-size: 0.95rem;
+    line-height: 1.6;
+    margin: 0;
+}
+
+/* ============================================
+   TECHNIQUES SECTION (detailed)
+   ============================================ */
+
+.techniques-section {
+    margin-bottom: 1.5rem;
+}
+
+.techniques-section h4 {
+    font-size: 1rem;
+    color: #1e293b;
+    margin-bottom: 0.75rem;
+}
+
+#manipTechniquesDetailed {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.technique-chip {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    color: #92400e;
+    border-radius: 20px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    border: 1px solid #fcd34d;
+}
+
+.no-techniques {
+    color: #16a34a;
+    font-size: 0.95rem;
+    padding: 0.5rem 0;
+}
+
+.no-facts {
+    color: #64748b;
+    font-style: italic;
+    padding: 1rem;
+    text-align: center;
+}

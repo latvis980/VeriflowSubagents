@@ -710,86 +710,118 @@
                     </div>
                 </div>
 
+
                 <!-- Manipulation Detection Results -->
                 <div id="manipulationResults" class="results-content" style="display: none;">
-                    <!-- Manipulation Score -->
-                    <div class="manipulation-score-container">
-                        <div class="score-display">
-                            <span id="manipulationScore" class="manipulation-score-value">0.0</span>
-                            <span class="manipulation-score-label">/ 10 Manipulation Score</span>
-                        </div>
-                        <div class="manipulation-score-details">
-                            <p id="manipScoreJustification"></p>
-                            <span id="manipConfidence"></span>
-                        </div>
+
+                    <!-- Inner Tabs: Summary | Facts -->
+                    <div class="manip-inner-tabs">
+                        <button id="manipSummaryTab" class="manip-tab active" data-tab="summary">
+                            📊 Summary
+                        </button>
+                        <button id="manipFactsTab" class="manip-tab" data-tab="facts">
+                            🔍 Fact-by-Fact Analysis
+                        </button>
                     </div>
 
-                    <!-- Article Summary -->
-                    <div id="manipulationSummary" class="manipulation-summary-card">
-                        <h4>📰 Article Analysis</h4>
-                        <div class="summary-meta-row">
-                            <div class="meta-item">
-                                <span class="meta-label">Political Lean:</span>
-                                <span id="manipPoliticalLean" class="lean-badge">-</span>
+                    <!-- ========================================
+                         SUMMARY TAB CONTENT (Human-like narrative)
+                         ======================================== -->
+                    <div id="manipSummaryContent" class="manip-tab-content">
+
+                        <!-- Score Display (compact) -->
+                        <div class="manipulation-score-header">
+                            <div class="score-circle">
+                                <span id="manipulationScore" class="manipulation-score-value">0.0</span>
+                                <span class="score-max">/ 10</span>
                             </div>
-                            <div class="meta-item">
-                                <span class="meta-label">Content:</span>
-                                <span id="manipOpinionRatio" class="ratio-value">-</span>
-                            </div>
-                            <div class="meta-item">
-                                <span class="meta-label">Tone:</span>
-                                <span id="manipEmotionalTone">-</span>
+                            <div class="score-info">
+                                <span id="manipScoreLabel" class="score-label">Manipulation Score</span>
+                                <span id="manipConfidence" class="confidence-badge"></span>
                             </div>
                         </div>
-                        <div class="summary-section">
-                            <div class="summary-section-label">Main Thesis</div>
-                            <div id="manipMainThesis" class="summary-section-content">-</div>
+
+                        <!-- Quick Meta Info -->
+                        <div id="manipQuickMeta" class="quick-meta-row"></div>
+
+                        <!-- Narrative Summary (Main human-like analysis) -->
+                        <div class="narrative-section">
+                            <h4>📝 Analysis</h4>
+                            <div id="manipNarrativeSummary" class="narrative-container">
+                                <!-- Generated narrative will appear here -->
+                            </div>
                         </div>
-                        <div class="summary-section">
-                            <div class="summary-section-label">Detected Agenda</div>
-                            <div id="manipDetectedAgenda" class="summary-section-content">-</div>
+
+                        <!-- Techniques (compact) -->
+                        <div class="techniques-summary-section">
+                            <h4>⚠️ Techniques Detected</h4>
+                            <div id="manipTechniquesSummary" class="techniques-compact"></div>
                         </div>
-                        <div class="summary-section">
-                            <div class="summary-section-label">Target Audience</div>
-                            <div id="manipTargetAudience" class="summary-section-content">-</div>
+
+                        <!-- Key Takeaways -->
+                        <div class="takeaways-section">
+                            <h4>📌 Key Takeaways</h4>
+                            <div id="manipKeyTakeaways" class="takeaways-container"></div>
                         </div>
-                        <div class="summary-section">
-                            <div class="summary-section-label">Rhetorical Strategies</div>
-                            <div id="manipRhetoricalStrategies" class="summary-section-content"></div>
+
+                        <!-- Recommendation -->
+                        <div class="recommendation-summary">
+                            <h4>📋 Recommendation</h4>
+                            <p id="manipRecommendationSummary" class="recommendation-text"></p>
                         </div>
+
+                        <!-- View Details Link -->
+                        <div class="view-details-prompt">
+                            <p>👆 Click <strong>"Fact-by-Fact Analysis"</strong> tab for detailed breakdown of each claim</p>
+                        </div>
+
                     </div>
 
-                    <!-- Manipulation Techniques -->
-                    <div class="techniques-section">
-                        <h4>⚠️ Manipulation Techniques Detected</h4>
-                        <div id="manipTechniquesUsed"></div>
-                    </div>
+                    <!-- ========================================
+                         FACTS TAB CONTENT (Detailed analysis)
+                         ======================================== -->
+                    <div id="manipFactsContent" class="manip-tab-content" style="display: none;">
 
-                    <!-- Facts Analysis -->
-                    <div class="manipulation-facts-section">
-                        <h4>🔍 Fact-by-Fact Analysis</h4>
-                        <div id="manipFactsList"></div>
-                    </div>
-
-                    <!-- Balanced Assessment -->
-                    <div class="balanced-assessment">
-                        <div class="got-right-card">
-                            <h4>✅ What the Article Got Right</h4>
-                            <div id="manipWhatGotRight"></div>
+                        <!-- Article Summary (detailed) -->
+                        <div class="article-summary-detailed">
+                            <h4>📰 Article Analysis</h4>
+                            <div id="manipArticleSummaryDetailed"></div>
                         </div>
-                        <div class="misleading-card">
-                            <h4>⚠️ Key Misleading Elements</h4>
-                            <div id="manipMisleadingElements"></div>
+
+                        <!-- Techniques (detailed) -->
+                        <div class="techniques-section">
+                            <h4>⚠️ Manipulation Techniques Detected</h4>
+                            <div id="manipTechniquesDetailed"></div>
                         </div>
+
+                        <!-- Facts Analysis -->
+                        <div class="manipulation-facts-section">
+                            <h4>🔍 Fact-by-Fact Analysis</h4>
+                            <p class="facts-section-desc">Each claim from the article has been extracted and verified.</p>
+                            <div id="manipFactsList"></div>
+                        </div>
+
+                        <!-- Balanced Assessment -->
+                        <div class="balanced-assessment">
+                            <div class="got-right-card">
+                                <h4>✅ What the Article Got Right</h4>
+                                <div id="manipWhatGotRight"></div>
+                            </div>
+                            <div class="misleading-card">
+                                <h4>⚠️ Key Misleading Elements</h4>
+                                <div id="manipMisleadingElements"></div>
+                            </div>
+                        </div>
+
+                        <!-- Recommendation (detailed) -->
+                        <div class="recommendation-card">
+                            <h4>📋 Reader Recommendation</h4>
+                            <p id="manipRecommendationDetailed" class="recommendation-text"></p>
+                        </div>
+
                     </div>
 
-                    <!-- Recommendation -->
-                    <div class="recommendation-card">
-                        <h4>📋 Reader Recommendation</h4>
-                        <p id="manipRecommendation"></p>
-                    </div>
-
-                    <!-- Session Info -->
+                    <!-- Session Info (shown in both tabs) -->
                     <div class="session-info">
                         Session ID: <code id="manipSessionId">-</code>
                         <span class="separator">•</span>
@@ -797,6 +829,7 @@
                         <span class="separator" id="manipR2Sep" style="display: none;">•</span>
                         <a href="#" id="manipR2Link" target="_blank" style="display: none;">📄 View Full Report</a>
                     </div>
+
                 </div>
 
                 <!-- Actions (shown for all tabs) -->

@@ -696,6 +696,7 @@ class ManipulationOrchestrator:
                 'misleading_elements': report.key_misleading_elements,
                 'agenda_alignment': report.agenda_alignment_analysis,
                 'recommendation': report.reader_recommendation,
+                'narrative_summary': report.narrative_summary,
                 'confidence': report.confidence
             },
             'processing_time': report.processing_time,

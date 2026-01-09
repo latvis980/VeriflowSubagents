@@ -2,12 +2,15 @@
 // This file ties together all modules and sets up event listeners
 
 // ============================================
-// URL INPUT ELEMENTS (add to config.js if you prefer)
+// URL INPUT ELEMENTS
 // ============================================
 
 const articleUrl = document.getElementById('articleUrl');
 const fetchUrlBtn = document.getElementById('fetchUrlBtn');
 const urlFetchStatus = document.getElementById('urlFetchStatus');
+
+// Store the last fetched article data (including metadata & credibility)
+let lastFetchedArticle = null;
 
 // ============================================
 // URL INPUT HANDLING
@@ -24,7 +27,7 @@ function isValidUrl(string) {
 }
 
 // Show URL fetch status with different states
-function showUrlStatus(type, message) {
+function showUrlStatus(type, message, details = null) {
     if (!urlFetchStatus) return;
     urlFetchStatus.style.display = 'flex';
     urlFetchStatus.className = `url-fetch-status ${type}`;
@@ -32,13 +35,41 @@ function showUrlStatus(type, message) {
     const icons = {
         loading: '⏳',
         success: '✅',
-        error: '❌'
+        error: '❌',
+        info: 'ℹ️'
     };
 
-    urlFetchStatus.innerHTML = `
+    let html = `
         <span class="status-icon">${icons[type] || '📄'}</span>
         <span class="status-text">${message}</span>
     `;
+
+    // Add credibility badge if available
+    if (details && details.credibility) {
+        const tierColors = {
+            1: '#22c55e',  // green
+            2: '#84cc16',  // lime
+            3: '#eab308',  // yellow
+            4: '#f97316',  // orange
+            5: '#ef4444'   // red
+        };
+        const tier = details.credibility.tier || 3;
+        const color = tierColors[tier] || '#6b7280';
+
+        html += `
+            <span class="credibility-badge" style="
+                background: ${color}20;
+                color: ${color};
+                padding: 2px 8px;
+                border-radius: 12px;
+                font-size: 0.75rem;
+                font-weight: 600;
+                margin-left: 8px;
+            ">Tier ${tier}</span>
+        `;
+    }
+
+    urlFetchStatus.innerHTML = html;
 }
 
 function hideUrlStatus() {
@@ -47,39 +78,162 @@ function hideUrlStatus() {
     }
 }
 
-// Fetch article content from URL via backend
-async function fetchArticleFromUrl(url) {
-    showUrlStatus('loading', 'Fetching article content...');
+// ============================================
+// JOB-BASED URL FETCHING
+// ============================================
+
+/**
+ * Poll for job completion
+ * @param {string} jobId - The job ID to poll
+ * @param {function} onProgress - Callback for progress updates
+ * @param {number} maxWaitMs - Maximum time to wait (default 120 seconds)
+ * @returns {Promise<object>} - The job result
+ */
+async function pollJobCompletion(jobId, onProgress = null, maxWaitMs = 120000) {
+    const startTime = Date.now();
+    const pollInterval = 1000; // 1 second
+
+    while (Date.now() - startTime < maxWaitMs) {
+        try {
+            const response = await fetch(`/api/job/${jobId}`);
+            const job = await response.json();
+
+            if (job.error && !job.status) {
+                throw new Error(job.error);
+            }
+
+            // Call progress callback if provided
+            if (onProgress && job.progress_log && job.progress_log.length > 0) {
+                const lastProgress = job.progress_log[job.progress_log.length - 1];
+                onProgress(lastProgress);
+            }
+
+            if (job.status === 'completed') {
+                return job.result;
+            }
+
+            if (job.status === 'failed') {
+                throw new Error(job.error || 'Job failed');
+            }
+
+            if (job.status === 'cancelled') {
+                throw new Error('Job was cancelled');
+            }
+
+            // Wait before next poll
+            await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+        } catch (error) {
+            if (error.message.includes('Job not found')) {
+                throw new Error('Job expired or not found');
+            }
+            throw error;
+        }
+    }
+
+    throw new Error('Timeout waiting for job completion');
+}
+
+/**
+ * Fetch article content from URL via backend (JOB-BASED VERSION)
+ * Returns enriched data including metadata and credibility
+ * 
+ * @param {string} url - The URL to fetch
+ * @param {object} options - Optional settings
+ * @returns {Promise<object>} - Enriched article data
+ */
+async function fetchArticleFromUrl(url, options = {}) {
+    const {
+        extractMetadata = true,
+        checkCredibility = true,
+        runMbfcIfMissing = true
+    } = options;
+
+    showUrlStatus('loading', 'Starting article fetch...');
 
     try {
-        const response = await fetch('/api/scrape-url', {
+        // Step 1: Start the scrape job
+        const startResponse = await fetch('/api/scrape-url', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ url: url })
+            body: JSON.stringify({ 
+                url: url,
+                extract_metadata: extractMetadata,
+                check_credibility: checkCredibility,
+                run_mbfc_if_missing: runMbfcIfMissing
+            })
         });
 
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || error.message || 'Failed to fetch article');
+        if (!startResponse.ok) {
+            const error = await startResponse.json();
+            throw new Error(error.error || error.message || 'Failed to start fetch');
         }
 
-        const data = await response.json();
+        const startData = await startResponse.json();
+        const jobId = startData.job_id;
 
-        if (!data.content || data.content.trim().length < 100) {
+        if (!jobId) {
+            throw new Error('No job ID returned');
+        }
+
+        showUrlStatus('loading', 'Scraping article content...');
+
+        // Step 2: Poll for completion with progress updates
+        const result = await pollJobCompletion(jobId, (progress) => {
+            if (progress && progress.message) {
+                showUrlStatus('loading', progress.message);
+            }
+        });
+
+        // Step 3: Validate result
+        if (!result.success) {
+            throw new Error(result.error || 'Failed to fetch article');
+        }
+
+        if (!result.content || result.content.trim().length < 100) {
             throw new Error('Could not extract sufficient content from the URL');
         }
 
-        // Show success with content length
-        const charCount = data.content.length.toLocaleString();
-        const titleInfo = data.title ? ` from "${data.title}"` : '';
-        showUrlStatus('success', `Fetched ${charCount} characters${titleInfo}`);
+        // Store the full result for later use
+        lastFetchedArticle = result;
+
+        // Build success message
+        const charCount = result.content_length.toLocaleString();
+        let successMsg = `Fetched ${charCount} characters`;
+
+        if (result.title) {
+            successMsg += ` from "${result.title.substring(0, 40)}${result.title.length > 40 ? '...' : ''}"`;
+        }
+
+        if (result.author) {
+            successMsg += ` by ${result.author}`;
+        }
+
+        showUrlStatus('success', successMsg, result);
+
+        // Display metadata card if we have rich data
+        if (result.title || result.author || result.publication_date || result.credibility) {
+            displayArticleMetadata(result);
+        }
 
         return {
-            content: data.content,
-            title: data.title,
-            url: data.url
+            content: result.content,
+            title: result.title,
+            url: result.url,
+            // Include all the enriched data
+            metadata: {
+                author: result.author,
+                publicationDate: result.publication_date,
+                publicationDateRaw: result.publication_date_raw,
+                publicationName: result.publication_name,
+                articleType: result.article_type,
+                section: result.section,
+                confidence: result.metadata_confidence
+            },
+            credibility: result.credibility,
+            domain: result.domain
         };
 
     } catch (error) {
@@ -88,7 +242,173 @@ async function fetchArticleFromUrl(url) {
     }
 }
 
-// Initialize URL input event listeners
+// ============================================
+// ARTICLE METADATA DISPLAY
+// ============================================
+
+/**
+ * Display article metadata card below the URL input
+ * @param {object} article - The enriched article data
+ */
+function displayArticleMetadata(article) {
+    // Remove existing metadata card if any
+    const existingCard = document.getElementById('articleMetadataCard');
+    if (existingCard) {
+        existingCard.remove();
+    }
+
+    // Don't show if no meaningful metadata
+    if (!article.title && !article.author && !article.credibility) {
+        return;
+    }
+
+    const card = document.createElement('div');
+    card.id = 'articleMetadataCard';
+    card.className = 'article-metadata-card';
+
+    // Build card content
+    let html = '<div class="metadata-header">';
+
+    // Credibility tier badge
+    if (article.credibility) {
+        const tier = article.credibility.tier || 3;
+        const tierColors = {
+            1: { bg: '#dcfce7', text: '#166534', border: '#86efac' },
+            2: { bg: '#ecfccb', text: '#3f6212', border: '#bef264' },
+            3: { bg: '#fef9c3', text: '#854d0e', border: '#fde047' },
+            4: { bg: '#ffedd5', text: '#9a3412', border: '#fdba74' },
+            5: { bg: '#fee2e2', text: '#991b1b', border: '#fca5a5' }
+        };
+        const colors = tierColors[tier] || tierColors[3];
+
+        html += `
+            <div class="credibility-tier-badge" style="
+                background: ${colors.bg};
+                color: ${colors.text};
+                border: 1px solid ${colors.border};
+                padding: 4px 12px;
+                border-radius: 16px;
+                font-weight: 600;
+                font-size: 0.85rem;
+            ">
+                Tier ${tier} ${getCredibilityEmoji(tier)}
+            </div>
+        `;
+    }
+
+    html += '</div>';
+
+    // Article info
+    html += '<div class="metadata-body">';
+
+    if (article.title) {
+        html += `<h4 class="metadata-title">${escapeHtml(article.title)}</h4>`;
+    }
+
+    html += '<div class="metadata-details">';
+
+    if (article.publication_name || article.domain) {
+        html += `
+            <span class="metadata-item">
+                <span class="metadata-icon">📰</span>
+                ${escapeHtml(article.publication_name || article.domain)}
+            </span>
+        `;
+    }
+
+    if (article.author) {
+        html += `
+            <span class="metadata-item">
+                <span class="metadata-icon">✍️</span>
+                ${escapeHtml(article.author)}
+            </span>
+        `;
+    }
+
+    if (article.publication_date) {
+        const dateStr = formatDate(article.publication_date);
+        html += `
+            <span class="metadata-item">
+                <span class="metadata-icon">📅</span>
+                ${dateStr}
+            </span>
+        `;
+    }
+
+    html += '</div>'; // metadata-details
+
+    // Credibility details (collapsible)
+    if (article.credibility && article.credibility.source !== 'fallback') {
+        html += `
+            <details class="credibility-details">
+                <summary>View credibility details</summary>
+                <div class="credibility-info">
+                    ${article.credibility.rating ? `<div><strong>Rating:</strong> ${article.credibility.rating}</div>` : ''}
+                    ${article.credibility.bias_rating ? `<div><strong>Bias:</strong> ${article.credibility.bias_rating}</div>` : ''}
+                    ${article.credibility.factual_reporting ? `<div><strong>Factual:</strong> ${article.credibility.factual_reporting}</div>` : ''}
+                    ${article.credibility.tier_description ? `<div class="tier-desc">${article.credibility.tier_description}</div>` : ''}
+                    ${article.credibility.mbfc_url ? `<a href="${article.credibility.mbfc_url}" target="_blank" class="mbfc-link">View on MBFC →</a>` : ''}
+                </div>
+            </details>
+        `;
+    }
+
+    html += '</div>'; // metadata-body
+
+    card.innerHTML = html;
+
+    // Insert after URL fetch status
+    const urlStatusElement = document.getElementById('urlFetchStatus');
+    if (urlStatusElement && urlStatusElement.parentNode) {
+        urlStatusElement.parentNode.insertBefore(card, urlStatusElement.nextSibling);
+    }
+}
+
+/**
+ * Get emoji for credibility tier
+ */
+function getCredibilityEmoji(tier) {
+    const emojis = {
+        1: '🏆',
+        2: '✅',
+        3: '⚠️',
+        4: '🔶',
+        5: '🚫'
+    };
+    return emojis[tier] || '❓';
+}
+
+/**
+ * Format ISO date to readable string
+ */
+function formatDate(isoDate) {
+    if (!isoDate) return '';
+    try {
+        const date = new Date(isoDate);
+        return date.toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'short', 
+            day: 'numeric' 
+        });
+    } catch {
+        return isoDate;
+    }
+}
+
+/**
+ * Escape HTML to prevent XSS
+ */
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// ============================================
+// URL INPUT LISTENERS INITIALIZATION
+// ============================================
+
 function initUrlInputListeners() {
     if (!articleUrl || !fetchUrlBtn) {
         console.log('URL input elements not found, skipping URL input initialization');
@@ -159,7 +479,10 @@ function initUrlInputListeners() {
     console.log('✅ URL input listeners initialized');
 }
 
-// Clear URL input field
+// ============================================
+// CLEAR URL INPUT
+// ============================================
+
 function clearUrlInput() {
     if (articleUrl) {
         articleUrl.value = '';
@@ -169,6 +492,34 @@ function clearUrlInput() {
     }
     hideUrlStatus();
     htmlInput.classList.remove('url-filled');
+
+    // Remove metadata card
+    const metadataCard = document.getElementById('articleMetadataCard');
+    if (metadataCard) {
+        metadataCard.remove();
+    }
+
+    // Clear stored article data
+    lastFetchedArticle = null;
+}
+
+// ============================================
+// HELPER: Get last fetched article data
+// ============================================
+
+/**
+ * Get the credibility data from the last fetched article
+ * Useful for passing to analysis endpoints
+ */
+function getLastFetchedCredibility() {
+    return lastFetchedArticle?.credibility || null;
+}
+
+/**
+ * Get the full last fetched article data
+ */
+function getLastFetchedArticle() {
+    return lastFetchedArticle;
 }
 
 // ============================================
@@ -222,10 +573,10 @@ async function handleAnalyze() {
         processContent(content, 'bias');
 
     } else if (AppState.currentMode === 'lie-detection') {
-                processContent(content, 'lie-detection');
+        processContent(content, 'lie-detection');
 
     } else if (AppState.currentMode === 'manipulation') {
-                processContent(content, 'manipulation');
+        processContent(content, 'manipulation');
     }
 }
 
@@ -264,7 +615,6 @@ async function processContent(content, type) {
         } else if (type === 'lie-detection') {
             addProgress('🕵️ Starting lie detection analysis...');
             await runLieDetection(content);
-
         } else if (type === 'manipulation') {
             addProgress('🎭 Starting manipulation analysis...');
             await runManipulationCheck(content);
@@ -285,45 +635,38 @@ async function processContent(content, type) {
 }
 
 // ============================================
-// DISPLAY RESULTS ROUTER
+// DISPLAY COMBINED RESULTS
 // ============================================
 
 function displayCombinedResults(type) {
     hideAllSections();
     showSection(resultsSection);
 
-    // Hide ALL tabs first
+    // Hide all result tabs first
     factCheckTab.style.display = 'none';
     if (keyClaimsTab) keyClaimsTab.style.display = 'none';
     biasAnalysisTab.style.display = 'none';
     lieDetectionTab.style.display = 'none';
     if (manipulationTab) manipulationTab.style.display = 'none';
 
-    // Show ONLY the tab for what was just run
     switch (type) {
         case 'html':
-            // LLM Output verification
-            factCheckTab.style.display = 'block';
-            displayVerificationResults();
-            switchResultTab('fact-check');
-            break;
-
         case 'text':
-            // Web Search fact-check
+            // Fact checking results
             factCheckTab.style.display = 'block';
-            displayVerificationResults();
+            displayFactCheckResults();
             switchResultTab('fact-check');
             break;
 
         case 'key-claims':
-            // Key Claims
+            // Key claims results
             if (keyClaimsTab) keyClaimsTab.style.display = 'block';
             displayKeyClaimsResults();
             switchResultTab('key-claims');
             break;
 
         case 'bias':
-            // Bias Analysis
+            // Bias analysis results
             biasAnalysisTab.style.display = 'block';
             displayBiasResults();
             switchResultTab('bias-analysis');
@@ -345,8 +688,8 @@ function displayCombinedResults(type) {
 
         default:
             console.error('Unknown result type:', type);
-        }
     }
+}
 
 // ============================================
 // EVENT LISTENERS SETUP
@@ -386,7 +729,7 @@ function initEventListeners() {
     clearBtn.addEventListener('click', () => {
         htmlInput.value = '';
         publicationUrl.value = '';
-        clearUrlInput();  // NEW: Clear URL input
+        clearUrlInput();  // Clear URL input and metadata
         hideContentFormatIndicator();
         hideAllSections();
         AppState.clearResults();
@@ -405,7 +748,7 @@ function initEventListeners() {
         hideAllSections();
         htmlInput.value = '';
         publicationUrl.value = '';
-        clearUrlInput();  // NEW: Clear URL input
+        clearUrlInput();  // Clear URL input and metadata
         hideContentFormatIndicator();
         AppState.clearResults();
     });
@@ -428,12 +771,13 @@ function initEventListeners() {
 
 function init() {
     initEventListeners();
-    initUrlInputListeners();  // NEW: Initialize URL input
+    initUrlInputListeners();  // Initialize URL input with metadata support
     initModalListeners();
     initBiasModelTabs();
 
     console.log('✅ VeriFlow app initialized successfully');
     console.log('📦 Modules loaded: config, utils, ui, modal, api, renderers');
+    console.log('🔗 URL fetching with metadata & credibility support enabled');
 }
 
 // Run initialization when DOM is ready

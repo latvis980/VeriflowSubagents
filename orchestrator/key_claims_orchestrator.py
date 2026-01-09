@@ -116,19 +116,53 @@ class KeyClaimsOrchestrator:
         run_type="chain",
         tags=["key-claims", "thesis-verification", "parallel"]
     )
-    async def process_with_progress(self, text_content: str, job_id: str) -> dict:
+    async def process_with_progress(
+    self,
+    text_content: str,
+    job_id: str,
+    source_context: Optional[Dict[str, Any]] = None,      # NEW
+    source_credibility: Optional[Dict[str, Any]] = None   # NEW
+    ) -> dict:
         """
         Complete key claims verification pipeline with parallel processing
 
         ✅ OPTIMIZED: All claim operations run in parallel
         """
         session_id = self.file_manager.create_session()
+        # Track credibility usage
+        using_credibility = source_credibility is not None
+        credibility_tier = source_credibility.get('tier') if source_credibility else None
         start_time = time.time()
 
         # Initialize session search audit
         session_audit = None
 
         try:
+            # ================================================================
+            # STAGE 0: Log Source Context (NEW)
+            # ================================================================
+            if source_credibility:
+                tier = source_credibility.get('tier', '?')
+                bias = source_credibility.get('bias_rating', 'Unknown')
+                factual = source_credibility.get('factual_reporting', 'Unknown')
+
+                job_manager.add_progress(
+                    job_id, 
+                    f"📊 Source context: Tier {tier} | {bias} bias | {factual} factual reporting"
+                )
+
+                if credibility_tier and credibility_tier >= 4:
+                    job_manager.add_progress(
+                        job_id,
+                        "⚠️ Low credibility source - claims require extra verification"
+                    )
+            elif source_context and source_context.get('publication_name'):
+                job_manager.add_progress(
+                    job_id,
+                    f"📰 Analyzing: {source_context.get('publication_name')}"
+                )
+            
+            
             # ================================================================
             # STAGE 1: Extract Key Claims (Sequential - single LLM call)
             # ================================================================
@@ -564,6 +598,9 @@ class KeyClaimsOrchestrator:
                 "summary": frontend_summary,
                 "processing_time": processing_time,
                 "methodology": "key_claims_verification",
+                "source_context": source_context,
+                "source_credibility": source_credibility,
+                "used_source_credibility": using_credibility,
                 "content_location": {
                     "country": content_location.country,
                     "language": content_location.language

@@ -227,45 +227,121 @@ def check_facts():
 
 @app.route('/api/key-claims', methods=['POST'])
 def check_key_claims():
-    """Extract and verify key claims from text"""
+    """
+    Extract and verify key claims from text.
+
+    NOW ACCEPTS: source_credibility parameter to provide context about
+    the source's reliability when verifying claims.
+
+    Request body:
+        {
+            "content": "Article text to analyze...",
+            "source_context": {                          # NEW - Optional
+                "url": "https://example.com/article",
+                "publication_name": "Example News",
+                "publication_date": "2024-01-15"
+            },
+            "source_credibility": {                      # NEW - Optional
+                "tier": 2,
+                "bias_rating": "CENTER",
+                "factual_reporting": "HIGH",
+                ...
+            }
+        }
+    """
     try:
         request_json = request.get_json()
+        if not request_json:
+            return jsonify({"error": "Invalid request format"}), 400
+
         content = request_json.get('content')
+
+        # NEW: Accept source context and credibility
+        source_context = request_json.get('source_context')  # url, name, date
+        source_credibility = request_json.get('source_credibility')
 
         if not content:
             return jsonify({"error": "No content provided"}), 400
 
         if key_claims_orchestrator is None:
-            return jsonify({"error": "Key claims pipeline not available"}), 503
+            return jsonify({
+                "error": "Key claims pipeline not available",
+                "message": "Key Claims Orchestrator not initialized"
+            }), 503
+
+        fact_logger.logger.info(
+            "🎯 Received key claims request",
+            extra={
+                "content_length": len(content),
+                "has_source_context": source_context is not None,
+                "has_credibility": source_credibility is not None
+            }
+        )
 
         job_id = job_manager.create_job(content)
+        fact_logger.logger.info(f"✅ Created key claims job: {job_id}")
 
-        thread = threading.Thread(
+        # Start background processing with new parameters
+        threading.Thread(
             target=run_key_claims_task,
-            args=(job_id, content)
-        )
-        thread.start()
+            args=(job_id, content, source_context, source_credibility),  # UPDATED
+            daemon=True
+        ).start()
 
-        return jsonify({"job_id": job_id, "status": "started"})
+        return jsonify({
+            "job_id": job_id,
+            "status": "processing",
+            "message": "Key claims analysis started"
+        })
 
     except Exception as e:
+        fact_logger.log_component_error("Flask API - Key Claims", e)
         return jsonify({"error": str(e)}), 500
 
-def run_key_claims_task(job_id: str, content: str):
-    """Background task runner for key claims verification"""
+def run_key_claims_task(
+    job_id: str, 
+    content: str,
+    source_context: Optional[Dict] = None,      # NEW PARAMETER
+    source_credibility: Optional[Dict] = None   # NEW PARAMETER
+):
+    """
+    Background task runner for key claims verification.
+
+    Args:
+        job_id: Job ID for tracking
+        content: Text to analyze
+        source_context: Optional dict with url, publication_name, publication_date
+        source_credibility: Optional pre-fetched credibility data
+    """
     try:
         if key_claims_orchestrator is None:
             raise ValueError("Key claims orchestrator not initialized")
 
-        result = run_async_in_thread(
-            key_claims_orchestrator.process_with_progress(content, job_id)
+        fact_logger.logger.info(
+            f"🎯 Job {job_id}: Starting key claims analysis",
+            extra={
+                "has_source_context": source_context is not None,
+                "has_credibility": source_credibility is not None
+            }
         )
-        job_manager.complete_job(job_id, result)
+
+        result = run_async_in_thread(
+            key_claims_orchestrator.process_with_progress(
+                text_content=content,
+                job_id=job_id,
+                source_context=source_context,        # NEW
+                source_credibility=source_credibility  # NEW
+            )
+        )
+
+        # Note: job completion handled inside process_with_progress
+        fact_logger.logger.info(f"✅ Key claims job {job_id} completed")
+
     except Exception as e:
+        fact_logger.log_component_error(f"Key Claims Job {job_id}", e)
         job_manager.fail_job(job_id, str(e))
     finally:
         cleanup_thread_loop()
-
 
 @app.route('/api/check-bias', methods=['POST'])
 def check_bias():
@@ -333,6 +409,9 @@ def check_lie_detection():
         article_source = request_json.get('article_source')  # Optional: publication name
         article_date = request_json.get('article_date')      # Optional: publication date
 
+        # NEW: Accept pre-fetched credibility data
+        source_credibility = request_json.get('source_credibility')
+
         if not text:
             return jsonify({"error": "No text provided"}), 400
 
@@ -347,7 +426,8 @@ def check_lie_detection():
             extra={
                 "text_length": len(text),
                 "has_source": bool(article_source),
-                "has_date": bool(article_date)
+                "has_date": bool(article_date),
+                "has_prefetched_credibility": source_credibility is not None  # NEW
             }
         )
 
@@ -358,7 +438,7 @@ def check_lie_detection():
         # Start background processing
         threading.Thread(
             target=run_lie_detection_task,
-            args=(job_id, text, article_source, article_date),
+            args=(job_id, text, article_source, article_date, source_credibility),  # UPDATED
             daemon=True
         ).start()
 
@@ -377,7 +457,25 @@ def check_lie_detection():
 
 @app.route('/api/manipulation', methods=['POST'])
 def check_manipulation():
-    """Analyze article for opinion manipulation and agenda-driven fact distortion"""
+    """
+    Analyze article for opinion manipulation and agenda-driven fact distortion.
+
+    NOW ACCEPTS: source_credibility parameter to calibrate scrutiny level
+    based on source reliability.
+
+    Request body:
+        {
+            "content": "Article text to analyze...",
+            "source_info": "https://example.com/article",  # URL or source name
+            "source_credibility": {                         # NEW - Optional
+                "tier": 4,
+                "bias_rating": "RIGHT",
+                "factual_reporting": "MIXED",
+                "is_propaganda": false,
+                ...
+            }
+        }
+    """
     try:
         # Get content from request
         request_json = request.get_json()
@@ -386,6 +484,9 @@ def check_manipulation():
 
         content = request_json.get('content') or request_json.get('text')
         source_info = request_json.get('source_info', 'Unknown source')
+
+        # NEW: Accept pre-fetched credibility data
+        source_credibility = request_json.get('source_credibility')
 
         if not content:
             return jsonify({"error": "No content provided"}), 400
@@ -397,10 +498,11 @@ def check_manipulation():
             }), 503
 
         fact_logger.logger.info(
-            "📥 Received manipulation detection request",
+            "🎭 Received manipulation detection request",
             extra={
                 "content_length": len(content),
-                "source_info": source_info
+                "source_info": source_info,
+                "has_credibility": source_credibility is not None
             }
         )
 
@@ -408,10 +510,10 @@ def check_manipulation():
         job_id = job_manager.create_job(content)
         fact_logger.logger.info(f"✅ Created manipulation detection job: {job_id}")
 
-        # Start background processing
+        # Start background processing with source_credibility
         threading.Thread(
             target=run_manipulation_task,
-            args=(job_id, content, source_info),
+            args=(job_id, content, source_info, source_credibility),  # UPDATED
             daemon=True
         ).start()
 
@@ -428,24 +530,47 @@ def check_manipulation():
             "message": "An error occurred during manipulation analysis"
         }), 500
 
-def run_lie_detection_task(job_id: str, text: str, article_source: Optional[str], article_date: Optional[str]):
-    """Background task runner for lie detection analysis."""
+
+def run_lie_detection_task(
+    job_id: str, 
+    text: str, 
+    article_source: Optional[str], 
+    article_date: Optional[str],
+    source_credibility: Optional[Dict] = None  # NEW PARAMETER
+):
+    """
+    Background task runner for lie detection analysis.
+
+    Args:
+        job_id: Job ID for tracking
+        text: Text to analyze
+        article_source: Optional publication name
+        article_date: Optional publication date
+        source_credibility: Optional pre-fetched credibility data (NEW)
+    """
     try:
         if lie_detector_orchestrator is None:
             raise ValueError("Lie detector orchestrator not initialized")
 
-        fact_logger.logger.info(f"🕵️ Job {job_id}: Starting lie detection analysis")
+        fact_logger.logger.info(
+            f"🕵️ Job {job_id}: Starting lie detection analysis",
+            extra={
+                "has_source": bool(article_source),
+                "has_credibility": source_credibility is not None
+            }
+        )
 
         result = run_async_in_thread(
-            lie_detector_orchestrator.process(
-                text, 
-                job_id, 
-                article_source, 
-                article_date
+            lie_detector_orchestrator.process_with_progress(
+                text=text,
+                job_id=job_id,
+                article_source=article_source,
+                publication_date=article_date,
+                source_credibility=source_credibility  # NEW: Pass through
             )
         )
 
-        job_manager.complete_job(job_id, result)
+        # Note: job completion is handled inside process_with_progress
         fact_logger.logger.info(f"✅ Lie detection job {job_id} completed successfully")
 
     except Exception as e:
@@ -455,21 +580,51 @@ def run_lie_detection_task(job_id: str, text: str, article_source: Optional[str]
     finally:
         cleanup_thread_loop()
 
-def run_manipulation_task(job_id: str, content: str, source_info: str):
-    """Background task runner for manipulation detection"""
+def run_manipulation_task(
+    job_id: str, 
+    content: str, 
+    source_info: str,
+    source_credibility: Optional[Dict] = None  # NEW PARAMETER
+):
+    """
+    Background task runner for manipulation detection.
+
+    Args:
+        job_id: Job ID for tracking
+        content: Article text to analyze
+        source_info: URL or source name
+        source_credibility: Optional pre-fetched credibility data (NEW)
+    """
     try:
         if manipulation_orchestrator is None:
             raise ValueError("Manipulation orchestrator not initialized")
 
-        result = run_async_in_thread(
-            manipulation_orchestrator.process_with_progress(content, job_id, source_info)
+        fact_logger.logger.info(
+            f"🎭 Job {job_id}: Starting manipulation detection",
+            extra={
+                "source_info": source_info,
+                "has_credibility": source_credibility is not None
+            }
         )
-        job_manager.complete_job(job_id, result)
+
+        result = run_async_in_thread(
+            manipulation_orchestrator.process_with_progress(
+                content=content,
+                job_id=job_id,
+                source_info=source_info,
+                source_credibility=source_credibility  # NEW: Pass through
+            )
+        )
+
+        # Note: job completion handled inside process_with_progress
+        fact_logger.logger.info(f"✅ Manipulation detection job {job_id} completed")
+
     except Exception as e:
-        fact_logger.logger.error(f"Manipulation task error: {e}")
+        fact_logger.log_component_error(f"Manipulation Job {job_id}", e)
         job_manager.fail_job(job_id, str(e))
     finally:
         cleanup_thread_loop()
+
 
 def run_async_task(job_id: str, content: str, input_format: str):
     """
@@ -606,7 +761,7 @@ def stream_job_progress(job_id: str):
     )
 
 # ============================================
-# URL SCRAPING ENDPOINT
+# URL SCRAPING ENDPOINT - JOB-BASED (Avoids asyncio conflicts)
 # ============================================
 
 @app.route('/api/scrape-url', methods=['POST'])
@@ -614,56 +769,21 @@ def scrape_url():
     """
     Scrape, extract metadata, and check credibility for an article URL.
 
-    NEW: Returns enriched data including:
-    - Article content
-    - Metadata (title, author, publication date)
-    - Publication credibility (tier, bias, factual reporting)
+    Returns a job_id for polling (consistent with other endpoints).
+    All async ops run in single background thread - MBFC lookups work properly.
 
     Request body:
         {
             "url": "https://example.com/article",
             "extract_metadata": true,      // optional, default true
             "check_credibility": true,     // optional, default true
-            "run_mbfc_if_missing": true    // optional, default true
+            "run_mbfc_if_missing": true    // optional, default true (lazy DB population)
         }
 
-    Returns:
-        {
-            "success": true,
-            "url": "https://example.com/article",
-            "domain": "example.com",
+    Returns immediately:
+        {"job_id": "...", "status": "processing"}
 
-            // Content
-            "content": "Cleaned article text...",
-            "content_length": 5432,
-
-            // Metadata
-            "title": "Article Title",
-            "author": "John Smith",
-            "publication_date": "2024-01-15",
-            "publication_date_raw": "January 15, 2024",
-            "publication_name": "Example News",
-            "article_type": "news",
-            "metadata_confidence": 0.85,
-
-            // Credibility
-            "credibility": {
-                "tier": 2,
-                "tier_description": "Credible - Reputable mainstream media...",
-                "rating": "HIGH CREDIBILITY",
-                "bias_rating": "CENTER",
-                "factual_reporting": "HIGH",
-                "is_propaganda": false,
-                "special_tags": [],
-                "source": "supabase",
-                "reasoning": "Tier 2 based on MBFC: Factual reporting: HIGH...",
-                "mbfc_url": "https://mediabiasfactcheck.com/example-news/"
-            },
-
-            // Processing info
-            "processing_time_ms": 2345,
-            "errors": []
-        }
+    Poll /api/job/<job_id> for result with full enriched data.
     """
     try:
         request_json = request.get_json()
@@ -691,138 +811,278 @@ def scrape_url():
             extra={
                 "url": url,
                 "extract_metadata": extract_metadata,
-                "check_credibility": check_credibility
+                "check_credibility": check_credibility,
+                "run_mbfc_if_missing": run_mbfc_if_missing
             }
         )
 
-        # Import the enriched content service
-        from utils.enriched_content_service import EnrichedContentService
+        # Create job
+        job_id = job_manager.create_job(url)
+        fact_logger.logger.info(f"✅ Created scrape job: {job_id}")
 
-        # Run the async scrape operation
-        async def scrape_and_enrich():
-            service = EnrichedContentService(config)
-            try:
-                result = await service.scrape_and_enrich(
-                    url=url,
-                    extract_metadata=extract_metadata,
-                    check_credibility=check_credibility,
-                    run_mbfc_if_missing=run_mbfc_if_missing
-                )
-                return result
-            finally:
-                await service.close()
+        # Start background processing
+        threading.Thread(
+            target=run_scrape_task,
+            args=(job_id, url, extract_metadata, check_credibility, run_mbfc_if_missing),
+            daemon=True
+        ).start()
 
-        result = run_async_in_thread(scrape_and_enrich())
-
-        # Handle failure
-        if not result.success or result.article is None:
-            return jsonify({
-                "error": "Could not extract content from URL",
-                "message": result.error or "The page may be empty, paywalled, or use JavaScript rendering that we couldn't process."
-            }), 422
-
-        # Now article is guaranteed to be non-None
-        article = result.article
-
-        # Get tier description
-        tier_descriptions = {
-            1: "Highly Credible - Official sources, major wire services, highly reputable news",
-            2: "Credible - Reputable mainstream media with strong factual reporting",
-            3: "Mixed - Requires verification, may have bias or mixed factual reporting",
-            4: "Low Credibility - Significant bias issues or poor factual reporting",
-            5: "Unreliable - Propaganda, conspiracy, or known disinformation source"
-        }
-
-        # Build response
-        response = {
-            "success": True,
-            "url": article.url,
-            "domain": article.domain,
-
-            # Content
-            "content": article.content,
-            "content_length": article.content_length,
-
-            # Metadata
-            "title": article.title,
-            "author": article.author,
-            "publication_date": article.publication_date,
-            "publication_date_raw": article.publication_date_raw,
-            "publication_name": article.publication_name,
-            "article_type": article.article_type,
-            "section": article.section,
-            "metadata_confidence": article.metadata_confidence,
-
-            # Credibility (nested for clarity)
-            "credibility": {
-                "tier": article.credibility_tier,
-                "tier_description": tier_descriptions.get(article.credibility_tier, "Unknown"),
-                "rating": article.credibility_rating,
-                "bias_rating": article.bias_rating,
-                "factual_reporting": article.factual_reporting,
-                "is_propaganda": article.is_propaganda,
-                "special_tags": article.special_tags,
-                "source": article.credibility_source,
-                "reasoning": article.tier_reasoning,
-                "mbfc_url": article.mbfc_url
-            },
-
-            # Processing info
-            "processing_time_ms": article.processing_time_ms,
-            "scraped_at": article.scraped_at,
-            "errors": article.errors
-        }
-
-        fact_logger.logger.info(
-            "✅ Enriched scrape complete",
-            extra={
-                "url": url,
-                "domain": article.domain,
-                "content_length": article.content_length,
-                "title": article.title[:50] if article.title else None,
-                "author": article.author,
-                "date": article.publication_date,
-                "tier": article.credibility_tier,
-                "processing_ms": article.processing_time_ms
-            }
-        )
-
-        return jsonify(response)
+        return jsonify({
+            "job_id": job_id,
+            "status": "processing",
+            "message": "Scraping and enrichment started"
+        })
 
     except Exception as e:
-        fact_logger.log_component_error("Enriched URL Scraper API", e)
+        fact_logger.log_component_error("Scrape URL API", e)
         return jsonify({
             "error": str(e),
-            "message": "An error occurred while fetching the URL. Please try pasting the content directly."
+            "message": "An error occurred while starting the scrape job."
         }), 500
+
+
+def run_scrape_task(
+    job_id: str, 
+    url: str, 
+    extract_metadata: bool, 
+    check_credibility: bool,
+    run_mbfc_if_missing: bool
+):
+    """
+    Background task for scraping URL with metadata and credibility enrichment.
+
+    All async operations run in a SINGLE event loop, avoiding Playwright conflicts.
+    MBFC lookups work here and populate Supabase for future requests.
+    """
+    try:
+        job_manager.add_progress(job_id, f"🔗 Starting enriched scrape for {url}")
+
+        # Run everything in one async function to keep single event loop
+        async def do_enriched_scrape():
+            from utils.browserless_scraper import BrowserlessScraper
+            from urllib.parse import urlparse
+
+            errors: list = []
+
+            # Extract domain
+            parsed = urlparse(url)
+            domain = parsed.netloc.lower()
+            if domain.startswith('www.'):
+                domain = domain[4:]
+
+            # ============================================
+            # STEP 1: Scrape content
+            # ============================================
+            job_manager.add_progress(job_id, "📄 Scraping article content...")
+
+            scraper = BrowserlessScraper(config)
+            content = ""
+
+            try:
+                await scraper._initialize_browser_pool()
+                results = await scraper.scrape_urls_for_facts([url])
+                content = results.get(url, "")
+            finally:
+                await scraper.close()
+
+            if not content or len(content.strip()) < 100:
+                return {
+                    "success": False,
+                    "error": "Could not extract meaningful content from URL",
+                    "url": url,
+                    "domain": domain
+                }
+
+            job_manager.add_progress(job_id, f"✅ Scraped {len(content)} characters")
+
+            # Initialize result variables
+            title = None
+            author = None
+            publication_date = None
+            publication_date_raw = None
+            publication_name = None
+            article_type = None
+            section = None
+            metadata_confidence = 0.0
+
+            credibility_tier = 3
+            credibility_rating = None
+            bias_rating = None
+            factual_reporting = None
+            is_propaganda = False
+            special_tags: list = []
+            credibility_source = "unknown"
+            tier_reasoning = None
+            mbfc_url = None
+
+            # ============================================
+            # STEP 2: Extract metadata (no Playwright needed)
+            # ============================================
+            if extract_metadata:
+                job_manager.add_progress(job_id, "📋 Extracting article metadata...")
+                try:
+                    from utils.article_metadata_extractor import ArticleMetadataExtractor
+
+                    extractor = ArticleMetadataExtractor(config)
+                    metadata = await extractor.extract_metadata(url, content)
+
+                    title = metadata.title
+                    author = metadata.author
+                    publication_date = metadata.publication_date
+                    publication_date_raw = metadata.publication_date_raw
+                    publication_name = metadata.publication_name
+                    article_type = metadata.article_type
+                    section = metadata.section
+                    metadata_confidence = metadata.extraction_confidence
+
+                    job_manager.add_progress(
+                        job_id, 
+                        f"✅ Metadata: {title[:40] if title else 'No title'}... by {author or 'Unknown'}"
+                    )
+
+                except Exception as e:
+                    fact_logger.logger.warning(f"⚠️ Metadata extraction failed: {e}")
+                    errors.append(f"Metadata extraction failed: {str(e)}")
+
+            # ============================================
+            # STEP 3: Check credibility (with MBFC lookup if needed)
+            # ============================================
+            if check_credibility:
+                job_manager.add_progress(job_id, f"🔍 Checking credibility for {domain}...")
+                try:
+                    from utils.source_credibility_service import SourceCredibilityService
+                    from agents.brave_searcher import BraveSearcher
+
+                    # Initialize with Brave searcher for MBFC lookups
+                    brave_searcher = None
+                    mbfc_scraper = None
+
+                    if run_mbfc_if_missing and config.brave_api_key:
+                        brave_searcher = BraveSearcher(config)
+                        # Create a NEW scraper instance for MBFC (we already closed the first one)
+                        mbfc_scraper = BrowserlessScraper(config)
+
+                    service = SourceCredibilityService(
+                        config=config,
+                        brave_searcher=brave_searcher,
+                        scraper=mbfc_scraper
+                    )
+
+                    cred = await service.check_credibility(
+                        url=url,
+                        run_mbfc_if_missing=run_mbfc_if_missing
+                    )
+
+                    # Close MBFC scraper if we created one
+                    if mbfc_scraper:
+                        await mbfc_scraper.close()
+
+                    credibility_tier = cred.credibility_tier
+                    credibility_rating = cred.credibility_rating
+                    bias_rating = cred.bias_rating
+                    factual_reporting = cred.factual_reporting
+                    is_propaganda = cred.is_propaganda
+                    special_tags = cred.special_tags
+                    credibility_source = cred.source
+                    tier_reasoning = cred.tier_reasoning
+                    mbfc_url = cred.mbfc_url
+
+                    if not publication_name and cred.publication_name:
+                        publication_name = cred.publication_name
+
+                    # Log what happened
+                    if cred.source == "supabase":
+                        job_manager.add_progress(job_id, f"✅ Found {domain} in database (Tier {credibility_tier})")
+                    elif cred.source == "mbfc":
+                        job_manager.add_progress(job_id, f"✅ MBFC lookup complete, saved to database (Tier {credibility_tier})")
+                    else:
+                        job_manager.add_progress(job_id, f"ℹ️ No credibility data found for {domain} (Tier 3 default)")
+
+                except Exception as e:
+                    fact_logger.logger.warning(f"⚠️ Credibility check failed: {e}")
+                    errors.append(f"Credibility check failed: {str(e)}")
+
+            # Fallback title extraction
+            if not title:
+                lines = content.strip().split('\n')
+                if lines:
+                    first_line = lines[0].strip()
+                    if first_line.startswith('#'):
+                        title = first_line.lstrip('#').strip()[:200]
+
+            # Build result
+            tier_descriptions = {
+                1: "Highly Credible - Official sources, major wire services, highly reputable news",
+                2: "Credible - Reputable mainstream media with strong factual reporting",
+                3: "Mixed - Requires verification, may have bias or mixed factual reporting",
+                4: "Low Credibility - Significant bias issues or poor factual reporting",
+                5: "Unreliable - Propaganda, conspiracy, or known disinformation source"
+            }
+
+            return {
+                "success": True,
+                "url": url,
+                "domain": domain,
+
+                # Content
+                "content": content,
+                "content_length": len(content),
+
+                # Metadata
+                "title": title,
+                "author": author,
+                "publication_date": publication_date,
+                "publication_date_raw": publication_date_raw,
+                "publication_name": publication_name,
+                "article_type": article_type,
+                "section": section,
+                "metadata_confidence": metadata_confidence,
+
+                # Credibility
+                "credibility": {
+                    "tier": credibility_tier,
+                    "tier_description": tier_descriptions.get(credibility_tier, "Unknown"),
+                    "rating": credibility_rating,
+                    "bias_rating": bias_rating,
+                    "factual_reporting": factual_reporting,
+                    "is_propaganda": is_propaganda,
+                    "special_tags": special_tags,
+                    "source": credibility_source,
+                    "reasoning": tier_reasoning,
+                    "mbfc_url": mbfc_url
+                },
+
+                # Processing info
+                "errors": errors
+            }
+
+        # Run everything in one thread with one event loop
+        result = run_async_in_thread(do_enriched_scrape())
+
+        job_manager.add_progress(job_id, "✅ Enriched scrape complete!")
+        job_manager.complete_job(job_id, result)
+
+        fact_logger.logger.info(f"✅ Scrape job {job_id} completed successfully")
+
+    except Exception as e:
+        fact_logger.log_component_error(f"Scrape Job {job_id}", e)
+        job_manager.fail_job(job_id, str(e))
+
+    finally:
+        cleanup_thread_loop()
+
 
 # ============================================
 # CREDIBILITY CHECK ENDPOINT
 # ============================================
-# Standalone endpoint to check credibility without scraping
 
 @app.route('/api/check-credibility', methods=['POST'])
 def check_credibility():
     """
     Check credibility of a publication without scraping content.
 
-    Request body:
-        {
-            "url": "https://example.com/article",
-            "run_mbfc_if_missing": true  // optional, default false for speed
-        }
-
-    Returns:
-        {
-            "success": true,
-            "domain": "example.com",
-            "credibility": {
-                "tier": 2,
-                "tier_description": "Credible...",
-                "rating": "HIGH CREDIBILITY",
-                ...
-            }
-        }
+    If not in Supabase cache and run_mbfc_if_missing=true (default),
+    will do MBFC lookup and save to database for future requests.
     """
     try:
         request_json = request.get_json()
@@ -833,41 +1093,61 @@ def check_credibility():
         if not url:
             return jsonify({"error": "No URL provided"}), 400
 
-        run_mbfc = request_json.get('run_mbfc_if_missing', False)
+        run_mbfc = request_json.get('run_mbfc_if_missing', True)  # Default true for lazy population
 
-        from utils.source_credibility_service import SourceCredibilityService
+        # Create job (credibility check with MBFC can take time)
+        job_id = job_manager.create_job(url)
 
-        async def check():
-            # Initialize with dependencies for MBFC lookup
+        threading.Thread(
+            target=run_credibility_task,
+            args=(job_id, url, run_mbfc),
+            daemon=True
+        ).start()
+
+        return jsonify({
+            "job_id": job_id,
+            "status": "processing",
+            "message": "Credibility check started"
+        })
+
+    except Exception as e:
+        fact_logger.log_component_error("Credibility Check API", e)
+        return jsonify({"error": str(e)}), 500
+
+
+def run_credibility_task(job_id: str, url: str, run_mbfc: bool):
+    """Background task for credibility check with MBFC lookup"""
+    try:
+        async def do_check():
+            from utils.source_credibility_service import SourceCredibilityService
+            from utils.browserless_scraper import BrowserlessScraper
+            from agents.brave_searcher import BraveSearcher
+
             brave_searcher = None
             scraper = None
 
-            if run_mbfc:
-                try:
-                    from utils.brave_searcher import BraveSearcher
-                    from utils.browserless_scraper import BrowserlessScraper
-                    brave_searcher = BraveSearcher(config)
-                    scraper = BrowserlessScraper(config)
-                except Exception:
-                    pass
+            if run_mbfc and config.brave_api_key:
+                brave_searcher = BraveSearcher(config)
+                scraper = BrowserlessScraper(config)
 
-            service = SourceCredibilityService(
-                config=config,
-                brave_searcher=brave_searcher,
-                scraper=scraper
-            )
+            try:
+                service = SourceCredibilityService(
+                    config=config,
+                    brave_searcher=brave_searcher,
+                    scraper=scraper
+                )
 
-            cred_result = await service.check_credibility(
-                url=url,
-                run_mbfc_if_missing=run_mbfc
-            )
+                result = await service.check_credibility(
+                    url=url,
+                    run_mbfc_if_missing=run_mbfc
+                )
 
-            if scraper:
-                await scraper.close()
+                return result
+            finally:
+                if scraper:
+                    await scraper.close()
 
-            return cred_result
-
-        cred_result = run_async_in_thread(check())
+        cred_result = run_async_in_thread(do_check())
 
         tier_descriptions = {
             1: "Highly Credible - Official sources, major wire services, highly reputable news",
@@ -877,7 +1157,7 @@ def check_credibility():
             5: "Unreliable - Propaganda, conspiracy, or known disinformation source"
         }
 
-        return jsonify({
+        result = {
             "success": True,
             "url": url,
             "domain": cred_result.domain,
@@ -894,11 +1174,15 @@ def check_credibility():
                 "reasoning": cred_result.tier_reasoning,
                 "mbfc_url": cred_result.mbfc_url
             }
-        })
+        }
+
+        job_manager.complete_job(job_id, result)
 
     except Exception as e:
-        fact_logger.log_component_error("Credibility Check API", e)
-        return jsonify({"error": str(e)}), 500
+        fact_logger.log_component_error(f"Credibility Job {job_id}", e)
+        job_manager.fail_job(job_id, str(e))
+    finally:
+        cleanup_thread_loop()
 
 @app.route('/api/job/<job_id>/cancel', methods=['POST'])
 def cancel_job(job_id: str):

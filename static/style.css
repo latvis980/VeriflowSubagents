@@ -4125,3 +4125,165 @@ footer a:hover {
     padding: 1rem;
     text-align: center;
 }
+/* ============================================
+   ARTICLE METADATA CARD STYLES
+   Add this to your static/style.css file
+   ============================================ */
+
+.article-metadata-card {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.metadata-header {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 0.5rem;
+}
+
+.credibility-tier-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.metadata-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.metadata-title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #1e293b;
+    line-height: 1.4;
+}
+
+.metadata-details {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    font-size: 0.875rem;
+    color: #64748b;
+}
+
+.metadata-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.metadata-icon {
+    font-size: 0.9rem;
+}
+
+/* Credibility details expandable section */
+.credibility-details {
+    margin-top: 0.5rem;
+    padding-top: 0.75rem;
+    border-top: 1px dashed #e2e8f0;
+}
+
+.credibility-details summary {
+    cursor: pointer;
+    font-size: 0.8rem;
+    color: #6366f1;
+    font-weight: 500;
+    user-select: none;
+}
+
+.credibility-details summary:hover {
+    color: #4f46e5;
+}
+
+.credibility-details[open] summary {
+    margin-bottom: 0.75rem;
+}
+
+.credibility-info {
+    display: grid;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: #475569;
+    padding-left: 0.5rem;
+}
+
+.credibility-info div {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.credibility-info strong {
+    color: #334155;
+    min-width: 70px;
+}
+
+.tier-desc {
+    font-style: italic;
+    color: #64748b;
+    margin-top: 0.25rem;
+    font-size: 0.8rem;
+}
+
+.credibility-info .mbfc-link {
+    display: inline-block;
+    margin-top: 0.5rem;
+    color: #6366f1;
+    text-decoration: none;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.credibility-info .mbfc-link:hover {
+    text-decoration: underline;
+    color: #4f46e5;
+}
+
+/* ============================================
+   CREDIBILITY BADGE IN STATUS
+   ============================================ */
+
+.url-fetch-status .credibility-badge {
+    display: inline-flex;
+    align-items: center;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+/* ============================================
+   LOADING ANIMATION FOR FETCH
+   ============================================ */
+
+.url-fetch-status.loading .status-icon {
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* ============================================
+   RESPONSIVE ADJUSTMENTS
+   ============================================ */
+
+@media (max-width: 600px) {
+    .metadata-details {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .article-metadata-card {
+        padding: 0.75rem;
+    }
+
+    .metadata-title {
+        font-size: 0.95rem;
+    }
+}

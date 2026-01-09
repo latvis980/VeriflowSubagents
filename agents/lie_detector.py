@@ -178,39 +178,46 @@ class LieDetector:
         self, 
         text: str,
         url: Optional[str] = None,
-        publication_date: Optional[str] = None
+        publication_date: Optional[str] = None,
+        credibility_context: Optional[str] = None  # NEW PARAMETER
     ) -> LieDetectionResult:
         """
         Analyze text for deception markers
-        
+
         Args:
             text: The article text to analyze
             url: Optional article URL
             publication_date: Optional publication date (if available)
-            
+            credibility_context: Optional context about source credibility (NEW)
+                Used to calibrate how skeptical the analysis should be
+
         Returns:
             LieDetectionResult with comprehensive analysis
         """
         fact_logger.logger.info("🔍 Starting lie detection analysis")
-        
+
         # Limit content to avoid token limits
         if len(text) > 20000:
             fact_logger.logger.info("⚠️ Content too long, truncating to 20000 characters")
             text = text[:20000]
-        
+
         # Get current date
         current_date = datetime.now()
         current_date_str = current_date.strftime("%B %d, %Y")
-        
+
         # Build temporal context
         temporal_context = self._build_temporal_context(publication_date, current_date)
-        
+
+        # NEW: Append credibility context if provided
+        if credibility_context:
+            temporal_context = f"{temporal_context}\n\n{credibility_context}"
+
         # Build article source context
         article_source = f"ARTICLE URL: {url}" if url else "ARTICLE SOURCE: Plain text input"
-        
+
         # Create prompt with system prompt that includes current date
         system_prompt = self.prompts["system"].format(current_date=current_date_str)
-        
+
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt + "\n\nCRITICAL: Return ONLY valid JSON. No markdown, no explanations, just the JSON object."),
             ("user", self.prompts["user"] + "\n\nReturn ONLY the JSON object, nothing else.")

@@ -27,7 +27,7 @@ Reuses existing components:
 from langsmith import traceable
 import time
 import asyncio
-from typing import List, Dict, Any, Optional, Tuple, Union
+from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
 
 from utils.logger import fact_logger
@@ -36,6 +36,14 @@ from utils.file_manager import FileManager
 from utils.job_manager import job_manager
 from utils.browserless_scraper import BrowserlessScraper
 from utils.brave_searcher import BraveSearcher
+
+# ✅ FIX 1: Import build_manipulation_context
+try:
+    from utils.credibility_context import build_manipulation_context
+except ImportError:
+    # Fallback if module not yet added
+    def build_manipulation_context(source_credibility=None, source_info=None):
+        return ""
 
 # Import the manipulation detector agent
 from agents.manipulation_detector import (
@@ -161,7 +169,8 @@ class ManipulationOrchestrator:
         self,
         content: str,
         job_id: str,
-        source_info: str = "Unknown source"
+        source_info: str = "Unknown source",
+        source_credibility: Optional[Dict[str, Any]] = None  # NEW
     ) -> Dict[str, Any]:
         """
         Run the full manipulation detection pipeline with progress updates
@@ -172,6 +181,7 @@ class ManipulationOrchestrator:
             content: Article text to analyze
             job_id: Job ID for progress tracking
             source_info: URL or source name
+            source_credibility: Optional pre-fetched credibility data (NEW)
 
         Returns:
             Dict with manipulation report and metadata
@@ -179,24 +189,70 @@ class ManipulationOrchestrator:
         start_time = time.time()
         session_id = self._generate_session_id()
 
+        # Track credibility usage
+        using_credibility = source_credibility is not None
+        credibility_tier = source_credibility.get('tier') if source_credibility else None
+        is_propaganda = source_credibility.get('is_propaganda', False) if source_credibility else False
+
         fact_logger.logger.info(
             "🚀 Starting manipulation detection pipeline",
             extra={
                 "job_id": job_id,
                 "session_id": session_id,
                 "content_length": len(content),
-                "parallel_mode": True
+                "parallel_mode": True,
+                "has_credibility": using_credibility
             }
         )
 
         try:
+            # ================================================================
+            # STAGE 0: Log Source Credibility Context (NEW)
+            # ================================================================
+            if source_credibility:
+                tier = source_credibility.get('tier', '?')
+                bias = source_credibility.get('bias_rating', 'Unknown')
+                factual = source_credibility.get('factual_reporting', 'Unknown')
+
+                job_manager.add_progress(
+                    job_id, 
+                    f"📊 Source credibility: Tier {tier} | {bias} bias | {factual} factual"
+                )
+
+                # Special warnings for concerning sources
+                if is_propaganda:
+                    job_manager.add_progress(
+                        job_id,
+                        "🚨 SOURCE FLAGGED AS PROPAGANDA - Maximum scrutiny applied"
+                    )
+                elif credibility_tier and credibility_tier >= 4:
+                    job_manager.add_progress(
+                        job_id,
+                        "⚠️ Low credibility source - heightened scrutiny for manipulation"
+                    )
+                elif credibility_tier and credibility_tier <= 2:
+                    job_manager.add_progress(
+                        job_id,
+                        "✅ High credibility source - focusing on subtle framing issues"
+                    )
+
             # ================================================================
             # STAGE 1: Article Analysis
             # ================================================================
             job_manager.add_progress(job_id, "📰 Analyzing article for agenda and bias...")
             self._check_cancellation(job_id)
 
-            article_summary = await self.detector.analyze_article(content, source_info)
+            # ✅ FIX 2: Build credibility context and call analyze_article OUTSIDE the if block
+            credibility_context = ""
+            if source_credibility:
+                credibility_context = build_manipulation_context(source_credibility, source_info)
+
+            # ✅ FIX 2: Always call analyze_article (not just when source_credibility exists)
+            article_summary = await self.detector.analyze_article(
+                content,
+                source_info,
+                credibility_context=credibility_context if credibility_context else None
+            )
 
             job_manager.add_progress(
                 job_id, 
@@ -217,7 +273,15 @@ class ManipulationOrchestrator:
 
             if not facts:
                 job_manager.add_progress(job_id, "⚠️ No verifiable facts found")
-                return self._build_no_facts_result(session_id, article_summary, start_time)
+                # ✅ FIX 3: Pass credibility variables to helper method
+                return self._build_no_facts_result(
+                    session_id=session_id,
+                    article_summary=article_summary,
+                    start_time=start_time,
+                    source_credibility=source_credibility,
+                    using_credibility=using_credibility,
+                    is_propaganda=is_propaganda
+                )
 
             # Limit facts if needed
             if len(facts) > self.max_facts:
@@ -405,14 +469,17 @@ class ManipulationOrchestrator:
                 if r2_url:
                     job_manager.add_progress(job_id, "☁️ Audit saved to cloud")
 
-            # Build final result
+            # ✅ FIX 4: Pass credibility to _build_result
             result = self._build_result(
                 session_id=session_id,
                 report=report,
                 facts=facts,
                 verification_results=verification_results,
                 r2_url=r2_url,
-                start_time=start_time
+                start_time=start_time,
+                source_credibility=source_credibility,
+                using_credibility=using_credibility,
+                is_propaganda=is_propaganda
             )
 
             job_manager.add_progress(job_id, "✅ Analysis complete!")
@@ -424,7 +491,8 @@ class ManipulationOrchestrator:
                     "manipulation_score": report.overall_manipulation_score,
                     "processing_time": round(time.time() - start_time, 2),
                     "verification_time": round(verification_duration, 2),
-                    "manipulation_analysis_time": round(manipulation_duration, 2)
+                    "manipulation_analysis_time": round(manipulation_duration, 2),
+                    "used_credibility": using_credibility
                 }
             )
 
@@ -647,19 +715,16 @@ class ManipulationOrchestrator:
                 return self._empty_verification("No search results found"), "", query_audits
 
             # Step 3: Filter by credibility
-            # ✅ FIX: Pass fact object and search_results list (not urls and fact_id)
             cred_results = await self.credibility_filter.evaluate_sources(
                 fact=fact_obj,
                 search_results=all_search_results
             )
 
-            # ✅ FIX: Use get_recommended_urls() method instead of credible_urls attribute
             credible_urls = cred_results.get_recommended_urls(min_score=0.70) if cred_results else []
 
             if not credible_urls:
                 return self._empty_verification("No credible sources found"), "", query_audits
 
-            # ✅ FIX: source_metadata is Dict[str, SourceMetadata], not Dict[str, Dict]
             source_metadata = cred_results.source_metadata if cred_results else {}
 
             # Step 4: Scrape sources
@@ -678,11 +743,9 @@ class ManipulationOrchestrator:
                 excerpts = await self.highlighter.highlight(fact_obj, {url: content})
                 url_excerpts = excerpts.get(url, [])
 
-                # ✅ FIX: source_metadata values are SourceMetadata objects, use getattr()
                 tier = 'unknown'
                 if source_metadata and url in source_metadata:
                     metadata_obj = source_metadata[url]
-                    # SourceMetadata is an object with attributes, not a dict
                     tier = getattr(metadata_obj, 'credibility_tier', 'unknown')
 
                 for excerpt in url_excerpts:
@@ -718,7 +781,7 @@ class ManipulationOrchestrator:
                     'tier': excerpt.get('tier', 'unknown')
                 })
 
-            # ✅ FIX: Convert source_metadata to dict format for fact_checker if needed
+            # Convert source_metadata to dict format for fact_checker
             source_metadata_dict: Dict[str, Dict[str, Any]] = {}
             for url, meta in source_metadata.items():
                 source_metadata_dict[url] = {
@@ -783,16 +846,24 @@ class ManipulationOrchestrator:
 
         return "\n".join(lines)
 
+    # ✅ FIX 3: Add credibility parameters to _build_no_facts_result
     def _build_no_facts_result(
         self,
         session_id: str,
         article_summary: ArticleSummary,
-        start_time: float
+        start_time: float,
+        source_credibility: Optional[Dict[str, Any]] = None,
+        using_credibility: bool = False,
+        is_propaganda: bool = False
     ) -> Dict[str, Any]:
         """Build result when no facts were extracted"""
         return {
             'success': True,
             'session_id': session_id,
+            # ✅ Include credibility fields
+            'source_credibility': source_credibility,
+            'used_source_credibility': using_credibility,
+            'source_flagged_propaganda': is_propaganda,
             'article_summary': {
                 'main_thesis': article_summary.main_thesis,
                 'political_lean': article_summary.political_lean,
@@ -815,6 +886,7 @@ class ManipulationOrchestrator:
             'r2_url': None
         }
 
+    # ✅ FIX 4: Add credibility parameters to _build_result
     def _build_result(
         self,
         session_id: str,
@@ -822,7 +894,10 @@ class ManipulationOrchestrator:
         facts: List[ExtractedFact],
         verification_results: Dict[str, Dict[str, Any]],
         r2_url: Optional[str],
-        start_time: float
+        start_time: float,
+        source_credibility: Optional[Dict[str, Any]] = None,
+        using_credibility: bool = False,
+        is_propaganda: bool = False
     ) -> Dict[str, Any]:
         """Build the final result dictionary"""
 
@@ -864,6 +939,10 @@ class ManipulationOrchestrator:
         return {
             'success': True,
             'session_id': session_id,
+            # ✅ Include credibility fields at top level
+            'source_credibility': source_credibility,
+            'used_source_credibility': using_credibility,
+            'source_flagged_propaganda': is_propaganda,
             'article_summary': {
                 'main_thesis': report.article_summary.main_thesis,
                 'political_lean': report.article_summary.political_lean,
@@ -875,7 +954,6 @@ class ManipulationOrchestrator:
                 'summary': report.article_summary.summary
             },
             'manipulation_score': report.overall_manipulation_score,
-            # ✅ FIX: Add 'report' object with fields frontend expects
             'report': {
                 'techniques_used': report.manipulation_techniques_used,
                 'what_got_right': report.what_article_got_right,

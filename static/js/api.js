@@ -78,6 +78,20 @@ function streamJobProgress(jobId, emoji = '⏳', reconnectAttempts = 0) {
 
 async function runLLMVerification(content) {
     try {
+        addProgress('🔍 Starting LLM interpretation verification...');
+
+        // Get source context if available
+        const fetchedArticle = getLastFetchedArticle();
+        let sourceContext = null;
+
+        if (fetchedArticle && fetchedArticle.credibility) {
+            sourceContext = {
+                publication: fetchedArticle.publication_name || fetchedArticle.domain,
+                credibility_tier: fetchedArticle.credibility.tier,
+                bias_rating: fetchedArticle.credibility.bias_rating
+            };
+        }
+
         const response = await fetch('/api/check', {
             method: 'POST',
             headers: {
@@ -85,7 +99,8 @@ async function runLLMVerification(content) {
             },
             body: JSON.stringify({
                 content: content,
-                input_type: 'html'
+                input_type: 'html',
+                source_context: sourceContext
             })
         });
 
@@ -106,6 +121,7 @@ async function runLLMVerification(content) {
     }
 }
 
+
 async function streamLLMVerificationProgress(jobId) {
     const result = await streamJobProgress(jobId, '🔍');
     AppState.currentLLMVerificationResults = result;
@@ -120,6 +136,23 @@ async function streamLLMVerificationProgress(jobId) {
 
 async function runFactCheck(content) {
     try {
+        addProgress('🔍 Starting web search fact-checking...');
+
+        // Get source context if available
+        const fetchedArticle = getLastFetchedArticle();
+        let sourceContext = null;
+
+        if (fetchedArticle && fetchedArticle.credibility) {
+            sourceContext = {
+                publication: fetchedArticle.publication_name || fetchedArticle.domain,
+                credibility_tier: fetchedArticle.credibility.tier,
+                bias_rating: fetchedArticle.credibility.bias_rating,
+                factual_reporting: fetchedArticle.credibility.factual_reporting
+            };
+
+            addProgress(`📰 Source: ${sourceContext.publication} | Tier ${sourceContext.credibility_tier} | ${sourceContext.bias_rating || 'Unknown bias'}`);
+        }
+
         const response = await fetch('/api/check', {
             method: 'POST',
             headers: {
@@ -127,7 +160,9 @@ async function runFactCheck(content) {
             },
             body: JSON.stringify({
                 content: content,
-                input_type: 'text'
+                input_type: 'text',
+                // NEW: Pass source context
+                source_context: sourceContext
             })
         });
 
@@ -162,19 +197,48 @@ async function streamFactCheckProgress(jobId) {
 
 async function runKeyClaimsCheck(content) {
     try {
+        addProgress('🎯 Extracting and verifying key claims...');
+
+        // Get metadata from fetched article for context
+        const fetchedArticle = getLastFetchedArticle();
+        let sourceContext = null;
+
+        if (fetchedArticle) {
+            sourceContext = {
+                publication: fetchedArticle.publication_name || fetchedArticle.domain,
+                author: fetchedArticle.author,
+                date: fetchedArticle.publication_date,
+                credibility: fetchedArticle.credibility
+            };
+
+            if (sourceContext.credibility) {
+                const tier = sourceContext.credibility.tier;
+                const tierDescriptions = {
+                    1: 'highly credible',
+                    2: 'credible',
+                    3: 'mixed credibility',
+                    4: 'low credibility',
+                    5: 'unreliable'
+                };
+                addProgress(`📰 Source: ${sourceContext.publication} (${tierDescriptions[tier] || 'unknown'})`);
+            }
+        }
+
         const response = await fetch('/api/key-claims', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                content: content
+                content: content,
+                // NEW: Pass source context for claim verification
+                source_context: sourceContext
             })
         });
 
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.error || 'Key claims analysis failed');
+            throw new Error(error.error || 'Key claims check failed');
         }
 
         const data = await response.json();
@@ -183,7 +247,7 @@ async function runKeyClaimsCheck(content) {
         await streamKeyClaimsProgress(data.job_id);
 
     } catch (error) {
-        console.error('Key claims error:', error);
+        console.error('Key claims check error:', error);
         addProgress(`❌ Key claims analysis failed: ${error.message}`, 'error');
         throw error;
     }
@@ -205,12 +269,24 @@ async function runBiasCheck(content) {
     try {
         addProgress('📊 Starting bias analysis...');
 
-        // NEW: Get publication URL instead of name
-        const pubUrl = publicationUrl.value.trim() || null;
+        // Get publication URL from input field
+        let pubUrl = publicationUrl?.value?.trim() || null;
 
-        // Log if we have a URL to look up
-        if (pubUrl) {
-            addProgress(`📰 Will look up bias data for: ${pubUrl}`);
+        // If we fetched an article, use its credibility data
+        const fetchedArticle = getLastFetchedArticle();
+        let sourceCredibility = null;
+
+        if (fetchedArticle) {
+            // Use the domain from fetched article if no manual URL provided
+            if (!pubUrl && fetchedArticle.domain) {
+                pubUrl = `https://${fetchedArticle.domain}`;
+            }
+
+            // Pass along the credibility we already have
+            if (fetchedArticle.credibility) {
+                sourceCredibility = fetchedArticle.credibility;
+                addProgress(`📰 Using credibility data: Tier ${sourceCredibility.tier} - ${sourceCredibility.bias_rating || 'Unknown bias'}`);
+            }
         }
 
         const response = await fetch('/api/check-bias', {
@@ -220,7 +296,9 @@ async function runBiasCheck(content) {
             },
             body: JSON.stringify({
                 text: content,
-                publication_url: pubUrl  // CHANGED: was publication_name
+                publication_url: pubUrl,
+                // NEW: Pass pre-fetched credibility to avoid duplicate lookups
+                source_credibility: sourceCredibility
             })
         });
 
@@ -263,13 +341,36 @@ async function runLieDetection(content) {
     try {
         addProgress('🕵️ Analyzing text for deception markers...');
 
+        // Get metadata from fetched article
+        const fetchedArticle = getLastFetchedArticle();
+        let articleSource = null;
+        let articleDate = null;
+        let sourceCredibility = null;
+
+        if (fetchedArticle) {
+            articleSource = fetchedArticle.publication_name || fetchedArticle.domain;
+            articleDate = fetchedArticle.publication_date;
+            sourceCredibility = fetchedArticle.credibility;
+
+            if (articleSource) {
+                addProgress(`📰 Analyzing article from: ${articleSource}`);
+            }
+            if (sourceCredibility) {
+                addProgress(`🔍 Source credibility: Tier ${sourceCredibility.tier}`);
+            }
+        }
+
         const response = await fetch('/api/check-lie-detection', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                text: content
+                text: content,
+                article_source: articleSource,
+                article_date: articleDate,
+                // NEW: Pass credibility for context
+                source_credibility: sourceCredibility
             })
         });
 
@@ -303,19 +404,47 @@ async function streamLieDetectionProgress(jobId) {
 
 async function runManipulationCheck(content) {
     try {
+        addProgress('🎭 Analyzing for manipulation techniques...');
+
+        // Get metadata from fetched article
+        const fetchedArticle = getLastFetchedArticle();
+        let sourceInfo = 'Unknown source';
+        let sourceCredibility = null;
+
+        if (fetchedArticle) {
+            const parts = [];
+            if (fetchedArticle.publication_name) parts.push(fetchedArticle.publication_name);
+            else if (fetchedArticle.domain) parts.push(fetchedArticle.domain);
+            if (fetchedArticle.author) parts.push(`by ${fetchedArticle.author}`);
+            if (fetchedArticle.publication_date) parts.push(`(${fetchedArticle.publication_date})`);
+
+            if (parts.length > 0) {
+                sourceInfo = parts.join(' ');
+            }
+
+            sourceCredibility = fetchedArticle.credibility;
+
+            if (sourceCredibility) {
+                addProgress(`🔍 Source credibility: Tier ${sourceCredibility.tier} - ${sourceCredibility.factual_reporting || 'Unknown'} factual reporting`);
+            }
+        }
+
         const response = await fetch('/api/manipulation', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                content: content
+                content: content,
+                source_info: sourceInfo,
+                // NEW: Pass credibility for enhanced analysis
+                source_credibility: sourceCredibility
             })
         });
 
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.error || 'Manipulation analysis failed');
+            throw new Error(error.error || 'Manipulation check failed');
         }
 
         const data = await response.json();
@@ -324,11 +453,12 @@ async function runManipulationCheck(content) {
         await streamManipulationProgress(data.job_id);
 
     } catch (error) {
-        console.error('Manipulation analysis error:', error);
+        console.error('Manipulation check error:', error);
         addProgress(`❌ Manipulation analysis failed: ${error.message}`, 'error');
         throw error;
     }
 }
+
 
 async function streamManipulationProgress(jobId) {
     const result = await streamJobProgress(jobId, '🎭');

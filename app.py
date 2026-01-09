@@ -254,6 +254,9 @@ def check_key_claims():
 def run_key_claims_task(job_id: str, content: str):
     """Background task runner for key claims verification"""
     try:
+        if key_claims_orchestrator is None:
+            raise ValueError("Key claims orchestrator not initialized")
+
         result = run_async_in_thread(
             key_claims_orchestrator.process_with_progress(content, job_id)
         )
@@ -428,9 +431,9 @@ def check_manipulation():
 def run_lie_detection_task(job_id: str, text: str, article_source: Optional[str], article_date: Optional[str]):
     """Background task runner for lie detection analysis."""
     try:
-        if lie_detector_orchestrator is None:  # ← ADD THIS CHECK
+        if lie_detector_orchestrator is None:
             raise ValueError("Lie detector orchestrator not initialized")
-            
+
         fact_logger.logger.info(f"🕵️ Job {job_id}: Starting lie detection analysis")
 
         result = run_async_in_thread(
@@ -455,6 +458,9 @@ def run_lie_detection_task(job_id: str, text: str, article_source: Optional[str]
 def run_manipulation_task(job_id: str, content: str, source_info: str):
     """Background task runner for manipulation detection"""
     try:
+        if manipulation_orchestrator is None:
+            raise ValueError("Manipulation orchestrator not initialized")
+
         result = run_async_in_thread(
             manipulation_orchestrator.process_with_progress(content, job_id, source_info)
         )
@@ -507,6 +513,9 @@ def run_async_task(job_id: str, content: str, input_format: str):
 def run_bias_task(job_id: str, text: str, publication_url: Optional[str] = None):
     """Background task for bias checking with MBFC lookup"""
     try:
+        if bias_orchestrator is None:
+            raise ValueError("Bias orchestrator not initialized")
+
         fact_logger.logger.info(f"🔄 Starting bias check job: {job_id}")
 
         result = run_async_in_thread(
@@ -516,6 +525,9 @@ def run_bias_task(job_id: str, text: str, publication_url: Optional[str] = None)
                 job_id=job_id
             )
         )
+
+        job_manager.complete_job(job_id, result)
+        fact_logger.logger.info(f"✅ Bias check job {job_id} completed successfully")
 
     except Exception as e:
         fact_logger.logger.error(f"❌ Bias check failed: {e}")
@@ -542,10 +554,9 @@ def get_job_status(job_id: str):
 @app.route('/api/job/<job_id>/stream')
 def stream_job_progress(job_id: str):
     """Server-Sent Events stream for real-time progress"""
-    def generate():
-        import time
-        import json
+    import json
 
+    def generate():
         job = job_manager.get_job(job_id)
         if not job:
             yield f"data: {json.dumps({'error': 'Job not found'})}\n\n"
@@ -601,19 +612,57 @@ def stream_job_progress(job_id: str):
 @app.route('/api/scrape-url', methods=['POST'])
 def scrape_url():
     """
-    Scrape and clean article content from a URL.
-    Used by the frontend to fetch articles for analysis.
+    Scrape, extract metadata, and check credibility for an article URL.
+
+    NEW: Returns enriched data including:
+    - Article content
+    - Metadata (title, author, publication date)
+    - Publication credibility (tier, bias, factual reporting)
 
     Request body:
-        {"url": "https://example.com/article"}
+        {
+            "url": "https://example.com/article",
+            "extract_metadata": true,      // optional, default true
+            "check_credibility": true,     // optional, default true
+            "run_mbfc_if_missing": true    // optional, default true
+        }
 
     Returns:
         {
             "success": true,
             "url": "https://example.com/article",
-            "title": "Article Title",
+            "domain": "example.com",
+
+            // Content
             "content": "Cleaned article text...",
-            "content_length": 5432
+            "content_length": 5432,
+
+            // Metadata
+            "title": "Article Title",
+            "author": "John Smith",
+            "publication_date": "2024-01-15",
+            "publication_date_raw": "January 15, 2024",
+            "publication_name": "Example News",
+            "article_type": "news",
+            "metadata_confidence": 0.85,
+
+            // Credibility
+            "credibility": {
+                "tier": 2,
+                "tier_description": "Credible - Reputable mainstream media...",
+                "rating": "HIGH CREDIBILITY",
+                "bias_rating": "CENTER",
+                "factual_reporting": "HIGH",
+                "is_propaganda": false,
+                "special_tags": [],
+                "source": "supabase",
+                "reasoning": "Tier 2 based on MBFC: Factual reporting: HIGH...",
+                "mbfc_url": "https://mediabiasfactcheck.com/example-news/"
+            },
+
+            // Processing info
+            "processing_time_ms": 2345,
+            "errors": []
         }
     """
     try:
@@ -632,68 +681,224 @@ def scrape_url():
                 "message": "URL must start with http:// or https://"
             }), 400
 
-        fact_logger.logger.info(
-            "🔗 Received URL scrape request",
-            extra={"url": url}
-        )
-
-        # Import the scraper
-        from utils.browserless_scraper import BrowserlessScraper
-
-        # Run the async scrape operation
-        async def scrape_content():
-            scraper = BrowserlessScraper(config)
-            try:
-                # Initialize browser pool
-                await scraper._initialize_browser_pool()
-                # Scrape using the batch method (takes a list, returns a dict)
-                results = await scraper.scrape_urls_for_facts([url])
-                return results.get(url, "")
-            finally:
-                await scraper.close()
-
-        content = run_async_in_thread(scrape_content())
-
-        # Validate we got meaningful content
-        if not content or len(content.strip()) < 100:
-            return jsonify({
-                "error": "Could not extract content from URL",
-                "message": "The page may be empty, paywalled, or use JavaScript rendering that we couldn't process. Try copying the article text directly."
-            }), 422
-
-        # Extract title from content if it starts with a markdown heading
-        title = None
-        lines = content.strip().split('\n')
-        if lines:
-            first_line = lines[0].strip()
-            if first_line.startswith('#'):
-                title = first_line.lstrip('#').strip()
-                if len(title) > 200:
-                    title = title[:197] + '...'
+        # Get optional parameters
+        extract_metadata = request_json.get('extract_metadata', True)
+        check_credibility = request_json.get('check_credibility', True)
+        run_mbfc_if_missing = request_json.get('run_mbfc_if_missing', True)
 
         fact_logger.logger.info(
-            "✅ Successfully scraped URL",
+            "🔗 Received enriched scrape request",
             extra={
                 "url": url,
-                "content_length": len(content),
-                "title": title
+                "extract_metadata": extract_metadata,
+                "check_credibility": check_credibility
             }
         )
 
-        return jsonify({
+        # Import the enriched content service
+        from utils.enriched_content_service import EnrichedContentService
+
+        # Run the async scrape operation
+        async def scrape_and_enrich():
+            service = EnrichedContentService(config)
+            try:
+                result = await service.scrape_and_enrich(
+                    url=url,
+                    extract_metadata=extract_metadata,
+                    check_credibility=check_credibility,
+                    run_mbfc_if_missing=run_mbfc_if_missing
+                )
+                return result
+            finally:
+                await service.close()
+
+        result = run_async_in_thread(scrape_and_enrich())
+
+        # Handle failure
+        if not result.success or result.article is None:
+            return jsonify({
+                "error": "Could not extract content from URL",
+                "message": result.error or "The page may be empty, paywalled, or use JavaScript rendering that we couldn't process."
+            }), 422
+
+        # Now article is guaranteed to be non-None
+        article = result.article
+
+        # Get tier description
+        tier_descriptions = {
+            1: "Highly Credible - Official sources, major wire services, highly reputable news",
+            2: "Credible - Reputable mainstream media with strong factual reporting",
+            3: "Mixed - Requires verification, may have bias or mixed factual reporting",
+            4: "Low Credibility - Significant bias issues or poor factual reporting",
+            5: "Unreliable - Propaganda, conspiracy, or known disinformation source"
+        }
+
+        # Build response
+        response = {
             "success": True,
-            "url": url,
-            "title": title,
-            "content": content,
-            "content_length": len(content)
-        })
+            "url": article.url,
+            "domain": article.domain,
+
+            # Content
+            "content": article.content,
+            "content_length": article.content_length,
+
+            # Metadata
+            "title": article.title,
+            "author": article.author,
+            "publication_date": article.publication_date,
+            "publication_date_raw": article.publication_date_raw,
+            "publication_name": article.publication_name,
+            "article_type": article.article_type,
+            "section": article.section,
+            "metadata_confidence": article.metadata_confidence,
+
+            # Credibility (nested for clarity)
+            "credibility": {
+                "tier": article.credibility_tier,
+                "tier_description": tier_descriptions.get(article.credibility_tier, "Unknown"),
+                "rating": article.credibility_rating,
+                "bias_rating": article.bias_rating,
+                "factual_reporting": article.factual_reporting,
+                "is_propaganda": article.is_propaganda,
+                "special_tags": article.special_tags,
+                "source": article.credibility_source,
+                "reasoning": article.tier_reasoning,
+                "mbfc_url": article.mbfc_url
+            },
+
+            # Processing info
+            "processing_time_ms": article.processing_time_ms,
+            "scraped_at": article.scraped_at,
+            "errors": article.errors
+        }
+
+        fact_logger.logger.info(
+            "✅ Enriched scrape complete",
+            extra={
+                "url": url,
+                "domain": article.domain,
+                "content_length": article.content_length,
+                "title": article.title[:50] if article.title else None,
+                "author": article.author,
+                "date": article.publication_date,
+                "tier": article.credibility_tier,
+                "processing_ms": article.processing_time_ms
+            }
+        )
+
+        return jsonify(response)
 
     except Exception as e:
-        fact_logger.log_component_error("URL Scraper API", e)
+        fact_logger.log_component_error("Enriched URL Scraper API", e)
         return jsonify({
             "error": str(e),
             "message": "An error occurred while fetching the URL. Please try pasting the content directly."
         }), 500
+
+# ============================================
+# CREDIBILITY CHECK ENDPOINT
+# ============================================
+# Standalone endpoint to check credibility without scraping
+
+@app.route('/api/check-credibility', methods=['POST'])
+def check_credibility():
+    """
+    Check credibility of a publication without scraping content.
+
+    Request body:
+        {
+            "url": "https://example.com/article",
+            "run_mbfc_if_missing": true  // optional, default false for speed
+        }
+
+    Returns:
+        {
+            "success": true,
+            "domain": "example.com",
+            "credibility": {
+                "tier": 2,
+                "tier_description": "Credible...",
+                "rating": "HIGH CREDIBILITY",
+                ...
+            }
+        }
+    """
+    try:
+        request_json = request.get_json()
+        if not request_json:
+            return jsonify({"error": "Invalid request format"}), 400
+
+        url = request_json.get('url')
+        if not url:
+            return jsonify({"error": "No URL provided"}), 400
+
+        run_mbfc = request_json.get('run_mbfc_if_missing', False)
+
+        from utils.source_credibility_service import SourceCredibilityService
+
+        async def check():
+            # Initialize with dependencies for MBFC lookup
+            brave_searcher = None
+            scraper = None
+
+            if run_mbfc:
+                try:
+                    from utils.brave_searcher import BraveSearcher
+                    from utils.browserless_scraper import BrowserlessScraper
+                    brave_searcher = BraveSearcher(config)
+                    scraper = BrowserlessScraper(config)
+                except Exception:
+                    pass
+
+            service = SourceCredibilityService(
+                config=config,
+                brave_searcher=brave_searcher,
+                scraper=scraper
+            )
+
+            cred_result = await service.check_credibility(
+                url=url,
+                run_mbfc_if_missing=run_mbfc
+            )
+
+            if scraper:
+                await scraper.close()
+
+            return cred_result
+
+        cred_result = run_async_in_thread(check())
+
+        tier_descriptions = {
+            1: "Highly Credible - Official sources, major wire services, highly reputable news",
+            2: "Credible - Reputable mainstream media with strong factual reporting",
+            3: "Mixed - Requires verification, may have bias or mixed factual reporting",
+            4: "Low Credibility - Significant bias issues or poor factual reporting",
+            5: "Unreliable - Propaganda, conspiracy, or known disinformation source"
+        }
+
+        return jsonify({
+            "success": True,
+            "url": url,
+            "domain": cred_result.domain,
+            "publication_name": cred_result.publication_name,
+            "credibility": {
+                "tier": cred_result.credibility_tier,
+                "tier_description": tier_descriptions.get(cred_result.credibility_tier, "Unknown"),
+                "rating": cred_result.credibility_rating,
+                "bias_rating": cred_result.bias_rating,
+                "factual_reporting": cred_result.factual_reporting,
+                "is_propaganda": cred_result.is_propaganda,
+                "special_tags": cred_result.special_tags,
+                "source": cred_result.source,
+                "reasoning": cred_result.tier_reasoning,
+                "mbfc_url": cred_result.mbfc_url
+            }
+        })
+
+    except Exception as e:
+        fact_logger.log_component_error("Credibility Check API", e)
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/job/<job_id>/cancel', methods=['POST'])
 def cancel_job(job_id: str):

@@ -866,14 +866,16 @@ class ManipulationOrchestrator:
                 'summary': report.article_summary.summary
             },
             'manipulation_score': report.overall_manipulation_score,
-            'score_justification': report.score_justification,
-            'manipulation_techniques': report.manipulation_techniques_used,
+            # ✅ FIX: Add 'report' object with fields frontend expects
+            'report': {
+                'techniques_used': report.manipulation_techniques_used,
+                'what_got_right': report.what_article_got_right,
+                'misleading_elements': report.key_misleading_elements,
+                'justification': report.score_justification,
+                'recommendation': report.reader_recommendation
+            },
             'facts_analyzed': facts_data,
             'manipulation_findings': findings_data,
-            'what_article_got_right': report.what_article_got_right,
-            'key_misleading_elements': report.key_misleading_elements,
-            'agenda_alignment': report.agenda_alignment_analysis,
-            'reader_recommendation': report.reader_recommendation,
             'processing_time': time.time() - start_time,
             'r2_url': r2_url
         }

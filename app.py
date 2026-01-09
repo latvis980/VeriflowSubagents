@@ -3,7 +3,7 @@ from flask import Flask, render_template, request, jsonify, Response
 import os
 import re
 import threading
-from typing import Optional
+from typing import Optional, Dict
 from dotenv import load_dotenv
 
 # Import your components

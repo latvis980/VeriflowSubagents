@@ -111,7 +111,7 @@ class EnrichedContentService:
             # Try to get brave searcher for MBFC lookups
             brave_searcher = None
             try:
-                from agents.brave_searcher import BraveSearcher
+                from utils.brave_searcher import BraveSearcher
                 brave_searcher = BraveSearcher(config) if config else None
             except Exception:
                 pass

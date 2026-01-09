@@ -951,7 +951,7 @@ def run_scrape_task(
                 job_manager.add_progress(job_id, f"🔍 Checking credibility for {domain}...")
                 try:
                     from utils.source_credibility_service import SourceCredibilityService
-                    from agents.brave_searcher import BraveSearcher
+                    from utils.brave_searcher import BraveSearcher
 
                     # Initialize with Brave searcher for MBFC lookups
                     brave_searcher = None
@@ -1121,7 +1121,7 @@ def run_credibility_task(job_id: str, url: str, run_mbfc: bool):
         async def do_check():
             from utils.source_credibility_service import SourceCredibilityService
             from utils.browserless_scraper import BrowserlessScraper
-            from agents.brave_searcher import BraveSearcher
+            from utils.brave_searcher import BraveSearcher
 
             brave_searcher = None
             scraper = None

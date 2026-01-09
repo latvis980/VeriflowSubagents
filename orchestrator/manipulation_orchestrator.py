@@ -484,6 +484,8 @@ class ManipulationOrchestrator:
 
             job_manager.add_progress(job_id, "✅ Analysis complete!")
 
+            job_manager.complete_job(job_id, result)
+
             fact_logger.logger.info(
                 "✅ Manipulation detection pipeline complete",
                 extra={

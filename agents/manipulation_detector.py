@@ -204,6 +204,12 @@ class ManipulationReport(BaseModel):
     reader_recommendation: str = Field(
         description="How readers should interpret this content"
     )
+
+    narrative_summary: str = Field(
+        default="",
+        description="Human-readable 2-4 sentence summary of the analysis for general readers"
+    )
+    
     confidence: float = Field(
         ge=0.0, le=1.0,
         description="Confidence in the analysis"
@@ -624,6 +630,7 @@ class ManipulationDetector:
                 key_misleading_elements=response.get('key_misleading_elements', []),
                 agenda_alignment_analysis=response.get('agenda_alignment_analysis', ''),
                 reader_recommendation=response.get('reader_recommendation', ''),
+                narrative_summary=response.get('narrative_summary', ''),
                 confidence=response.get('confidence', 0.7),
                 processing_time=processing_time + (time.time() - start_time)
             )

@@ -10,6 +10,8 @@ KEY FEATURES:
 - ✅ Fallback to local Playwright if Railway unavailable
 - ✅ TIMEOUT PROTECTION: Overall 30s timeout prevents infinite hangs
 - ✅ Individual operation timeouts for robustness
+- ✅ PARALLEL browser initialization (saves ~30 seconds!)
+- ✅ Paywall detection for early failure
 """
 
 import asyncio
@@ -72,7 +74,8 @@ class BrowserlessScraper:
             "total_scraped": 0,
             "successful_scrapes": 0,
             "failed_scrapes": 0,
-            "timeout_scrapes": 0,  # ✅ NEW: Track timeouts separately
+            "timeout_scrapes": 0,
+            "paywall_detected": 0,  # ✅ NEW: Track paywalls
             "avg_scrape_time": 0.0,
             "total_processing_time": 0.0,
             "browser_reuses": 0,
@@ -107,19 +110,22 @@ class BrowserlessScraper:
             fact_logger.logger.warning("No URLs provided for scraping")
             return {}
 
+        # ✅ FIX: Calculate how many browsers we actually need
+        num_browsers_needed = min(len(urls), 3)  # Cap at 3 for small batches
+
         fact_logger.logger.info(
             f"🚀 Starting scrape of {len(urls)} URLs with persistent browsers",
             extra={"url_count": len(urls), "replica_id": self.replica_id}
         )
 
-        # ✅ Initialize browser pool ONCE for all URLs
-        await self._initialize_browser_pool()
+        # ✅ FIX: Pass num_browsers_needed to initialize only what we need
+        await self._initialize_browser_pool(min_browsers=num_browsers_needed)
 
         try:
             # Process URLs with concurrency control
             semaphore = asyncio.Semaphore(self.max_concurrent)
             tasks = [
-                self._scrape_with_semaphore(semaphore, url, i % self.max_concurrent)
+                self._scrape_with_semaphore(semaphore, url, i % len(self.browser_pool))
                 for i, url in enumerate(urls)
             ]
 
@@ -138,7 +144,7 @@ class BrowserlessScraper:
                     results[url] = result
 
             successful = len([v for v in results.values() if v])
-            self.stats["browser_reuses"] += max(0, len(urls) - self.max_concurrent)
+            self.stats["browser_reuses"] += max(0, len(urls) - len(self.browser_pool))
 
             fact_logger.logger.info(
                 f"✅ Scraping complete: {successful}/{len(urls)} successful",
@@ -146,7 +152,8 @@ class BrowserlessScraper:
                     "successful": successful, 
                     "total": len(urls),
                     "browser_reuses": self.stats["browser_reuses"],
-                    "timeouts": self.stats["timeout_scrapes"]
+                    "timeouts": self.stats["timeout_scrapes"],
+                    "paywalls": self.stats["paywall_detected"]
                 }
             )
 
@@ -157,9 +164,13 @@ class BrowserlessScraper:
             # Browsers will be closed only when close() is called explicitly
             pass
 
-    async def _initialize_browser_pool(self):
+    async def _initialize_browser_pool(self, min_browsers: Optional[int] = None):
         """
-        ✅ NEW: Initialize persistent browser pool ONCE
+        ✅ OPTIMIZED: Initialize browser pool in PARALLEL
+
+        Args:
+            min_browsers: Minimum browsers to initialize (default: self.max_concurrent)
+                         For single URL scrapes, use min_browsers=1 or 2
         """
         if self.session_active:
             return  # Already initialized
@@ -168,25 +179,38 @@ class BrowserlessScraper:
             if self.session_active:
                 return
 
-            fact_logger.logger.info("🚀 Initializing browser pool...")
+            # Determine how many browsers we need
+            num_browsers = min_browsers if min_browsers else self.max_concurrent
+            num_browsers = min(num_browsers, self.max_concurrent)  # Cap at max
+
+            start_time = time.time()
+            fact_logger.logger.info(f"🚀 Initializing browser pool ({num_browsers} browsers in PARALLEL)...")
 
             # Start Playwright once
             self.playwright = await async_playwright().start()
 
-            # Create browser pool
-            for i in range(self.max_concurrent):
-                try:
-                    browser = await self._create_single_browser(i)
-                    if browser:
-                        self.browser_pool.append(browser)
-                        fact_logger.logger.info(f"✅ Browser {i+1}/{self.max_concurrent} ready")
-                except Exception as e:
-                    fact_logger.logger.error(f"❌ Failed to create browser {i+1}: {e}")
+            # ✅ KEY FIX: Create ALL browsers in PARALLEL
+            browser_tasks = [
+                self._create_single_browser(i) 
+                for i in range(num_browsers)
+            ]
+
+            # Wait for all browsers to initialize at once
+            results = await asyncio.gather(*browser_tasks, return_exceptions=True)
+
+            # Collect successful browsers
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    fact_logger.logger.error(f"❌ Browser {i} failed: {result}")
+                elif isinstance(result, Browser):  # Explicit type check
+                    self.browser_pool.append(result)
+
+            init_time = time.time() - start_time
 
             if len(self.browser_pool) > 0:
                 self.session_active = True
                 fact_logger.logger.info(
-                    f"🎯 Browser pool initialized: {len(self.browser_pool)}/{self.max_concurrent} browsers ready"
+                    f"🎯 Browser pool ready: {len(self.browser_pool)}/{num_browsers} browsers in {init_time:.1f}s"
                 )
             else:
                 raise Exception("Failed to initialize browser pool")
@@ -298,6 +322,57 @@ class BrowserlessScraper:
             )
             return ""
 
+    # ✅ FIX: _detect_paywall is now a proper class method (not nested!)
+    async def _detect_paywall(self, page: Page) -> bool:
+        """
+        Quick paywall detection to fail fast
+        Returns True if paywall detected
+        """
+        try:
+            # Common paywall indicators
+            paywall_selectors = [
+                '[class*="paywall"]',
+                '[class*="subscription"]',
+                '[id*="paywall"]',
+                '[data-testid*="paywall"]',
+                '.gateway-content',  # NYT
+                '.meteredContent',   # WSJ
+                '#paywall-container',
+                '.piano-offer',      # Piano paywall
+                '.tp-modal',         # Another Piano variant
+            ]
+
+            for selector in paywall_selectors:
+                try:
+                    element = await page.query_selector(selector)
+                    if element:
+                        is_visible = await element.is_visible()
+                        if is_visible:
+                            fact_logger.logger.warning(f"🔒 Paywall detected: {selector}")
+                            return True
+                except Exception:
+                    continue  # Selector might be invalid, skip
+
+            # Check for very short content (often indicates paywall)
+            try:
+                body_text = await page.inner_text('body')
+                if body_text and len(body_text.strip()) < 500:
+                    # Check for paywall keywords in body
+                    paywall_keywords = ['subscribe', 'subscription', 'sign in to read', 'become a member', 'premium content']
+                    body_lower = body_text.lower()
+                    for keyword in paywall_keywords:
+                        if keyword in body_lower:
+                            fact_logger.logger.warning(f"🔒 Likely paywall (short content with '{keyword}')")
+                            return True
+            except Exception:
+                pass
+
+            return False
+
+        except Exception as e:
+            fact_logger.logger.debug(f"Paywall detection error: {e}")
+            return False
+
     async def _scrape_url_inner(self, url: str, browser_index: int, browser: Browser, start_time: float) -> str:
         """
         ✅ NEW: Inner scraping logic separated for timeout wrapper
@@ -325,6 +400,14 @@ class BrowserlessScraper:
 
             # Navigate
             await page.goto(url, wait_until="domcontentloaded", timeout=timeout)
+
+            # ✅ FIX: Early paywall detection (call the method!)
+            if await self._detect_paywall(page):
+                self.stats["failed_scrapes"] += 1
+                self.stats["paywall_detected"] += 1
+                fact_logger.logger.warning(f"🔒 Paywall detected, skipping content extraction: {url}")
+                return ""
+
             await asyncio.sleep(0.5)  # Reduced from 1.0 to 0.5
 
             # ✅ FIX: Add timeout to content extraction
@@ -721,6 +804,7 @@ class BrowserlessScraper:
                 fact_logger.logger.debug(f"Playwright stop error (non-critical): {e}")
 
         self.session_active = False
+        self.browser_pool = []  # Clear pool
 
         # Print stats
         if self.stats["total_scraped"] > 0:
@@ -728,7 +812,7 @@ class BrowserlessScraper:
             fact_logger.logger.info(
                 f"📊 Scraping stats: {self.stats['successful_scrapes']}/{self.stats['total_scraped']} "
                 f"successful ({success_rate:.1f}%), {self.stats['browser_reuses']} browser reuses, "
-                f"{self.stats['timeout_scrapes']} timeouts"
+                f"{self.stats['timeout_scrapes']} timeouts, {self.stats['paywall_detected']} paywalls"
             )
 
         fact_logger.logger.info("✅ Scraper shutdown complete")

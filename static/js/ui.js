@@ -47,7 +47,6 @@ function addProgress(message, type = 'info') {
     const entry = document.createElement('div');
     entry.className = `progress-item ${type}`;
 
-    // Remove emoji prefixes for cleaner look (optional - keep for now for clarity)
     entry.textContent = message;
 
     progressLog.appendChild(entry);
@@ -132,7 +131,6 @@ function updatePlaceholder(mode) {
 // ============================================
 
 function switchResultTab(tabName) {
-    // Define tab mappings
     const tabMappings = {
         'fact-check': { tab: factCheckTab, panel: factCheckResults },
         'key-claims': { tab: keyClaimsTab, panel: keyClaimsResults },
@@ -141,7 +139,6 @@ function switchResultTab(tabName) {
         'manipulation': { tab: manipulationTab, panel: manipulationResults }
     };
 
-    // Hide all panels and deactivate all tabs
     Object.values(tabMappings).forEach(({ tab, panel }) => {
         if (tab) tab.classList.remove('active');
         if (panel) {
@@ -150,7 +147,6 @@ function switchResultTab(tabName) {
         }
     });
 
-    // Show selected tab and panel
     const selected = tabMappings[tabName];
     if (selected) {
         if (selected.tab) selected.tab.classList.add('active');
@@ -202,52 +198,91 @@ function updateToggleButton(isUrlMode) {
 }
 
 // ============================================
-// URL STATUS & ARTICLE METADATA DISPLAY
+// URL FETCH STATUS (Simple - just for loading/error)
 // ============================================
 
-function showUrlStatus(type, message, details = null) {
+function showUrlStatus(type, message) {
     if (!urlFetchStatus) return;
 
-    urlFetchStatus.style.display = 'block';
+    urlFetchStatus.style.display = 'flex';
     urlFetchStatus.className = `url-fetch-status ${type}`;
 
-    // Build the status HTML
-    let html = `
-        <div class="url-status-header">
-            <span class="status-icon">${getStatusIcon(type)}</span>
-            <span class="status-text">${message}</span>
-        </div>
+    urlFetchStatus.innerHTML = `
+        <span class="status-icon">${getStatusIcon(type)}</span>
+        <span class="status-text">${message}</span>
     `;
+}
 
-    // If we have article details, show the full metadata panel
-    if (details && type === 'success') {
-        html += buildArticleMetadataPanel(details);
+function hideUrlStatus() {
+    if (urlFetchStatus) {
+        urlFetchStatus.style.display = 'none';
     }
+}
 
-    urlFetchStatus.innerHTML = html;
+function getStatusIcon(type) {
+    const icons = {
+        loading: '⏳',
+        success: '✓',
+        error: '✕',
+        info: 'i'
+    };
+    return icons[type] || '•';
+}
+
+// ============================================
+// ARTICLE METADATA DISPLAY (Separate section above text)
+// ============================================
+
+/**
+ * Show article metadata in the dedicated container above the text area
+ * This is called after successfully fetching a URL
+ */
+function showArticleMetadata(details) {
+    const container = document.getElementById('articleMetadataContainer');
+    if (!container || !details) return;
+
+    container.style.display = 'block';
+    container.innerHTML = buildArticleMetadataPanel(details);
+}
+
+/**
+ * Hide the article metadata panel
+ */
+function hideArticleMetadata() {
+    const container = document.getElementById('articleMetadataContainer');
+    if (container) {
+        container.style.display = 'none';
+        container.innerHTML = '';
+    }
 }
 
 /**
  * Build the article metadata panel HTML
- * Shows title, author, date, publication, and credibility info
  */
 function buildArticleMetadataPanel(details) {
-    let metadataHtml = '<div class="article-metadata-panel">';
+    let html = '<div class="article-metadata-panel">';
+
+    // Header with source URL
+    html += `
+        <div class="metadata-header">
+            <span class="metadata-header-label">Source Article</span>
+            <button class="metadata-close-btn" onclick="hideArticleMetadata()" title="Close">×</button>
+        </div>
+    `;
 
     // Article info section
-    metadataHtml += '<div class="metadata-section article-info">';
+    html += '<div class="metadata-section article-info">';
 
     // Title
     if (details.title) {
-        metadataHtml += `
+        html += `
             <div class="metadata-row title-row">
-                <span class="metadata-label">Title</span>
                 <span class="metadata-value title-value">${escapeHtml(details.title)}</span>
             </div>
         `;
     }
 
-    // Author and Date on same row
+    // Author and Date
     const authorDateParts = [];
     if (details.author) {
         authorDateParts.push(`<span class="author-value">${escapeHtml(details.author)}</span>`);
@@ -257,14 +292,14 @@ function buildArticleMetadataPanel(details) {
         authorDateParts.push(`<span class="date-value">${escapeHtml(dateDisplay)}</span>`);
     }
     if (authorDateParts.length > 0) {
-        metadataHtml += `
+        html += `
             <div class="metadata-row author-date-row">
                 ${authorDateParts.join('<span class="metadata-separator">•</span>')}
             </div>
         `;
     }
 
-    // Publication name and type
+    // Publication name, type, section
     const pubParts = [];
     if (details.publication_name) {
         pubParts.push(`<span class="publication-name">${escapeHtml(details.publication_name)}</span>`);
@@ -276,36 +311,52 @@ function buildArticleMetadataPanel(details) {
         pubParts.push(`<span class="section-badge">${escapeHtml(details.section)}</span>`);
     }
     if (pubParts.length > 0) {
-        metadataHtml += `
+        html += `
             <div class="metadata-row publication-row">
                 ${pubParts.join(' ')}
             </div>
         `;
     }
 
-    metadataHtml += '</div>'; // End article-info
+    // URL display
+    if (details.url) {
+        html += `
+            <div class="metadata-row url-row">
+                <a href="${escapeHtml(details.url)}" target="_blank" rel="noopener" class="source-url-link">
+                    ${escapeHtml(details.domain || details.url)}
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                        <polyline points="15 3 21 3 21 9"/>
+                        <line x1="10" y1="14" x2="21" y2="3"/>
+                    </svg>
+                </a>
+            </div>
+        `;
+    }
+
+    html += '</div>'; // End article-info
 
     // Credibility section
     if (details.credibility) {
-        metadataHtml += buildCredibilitySection(details.credibility);
+        html += buildCredibilitySection(details.credibility);
     }
 
     // Content stats
     if (details.content_length) {
-        metadataHtml += `
+        html += `
             <div class="metadata-section content-stats">
                 <span class="content-length">${formatNumber(details.content_length)} characters extracted</span>
             </div>
         `;
     }
 
-    metadataHtml += '</div>'; // End article-metadata-panel
+    html += '</div>'; // End article-metadata-panel
 
-    return metadataHtml;
+    return html;
 }
 
 /**
- * Build the credibility section of the metadata panel
+ * Build the credibility section
  */
 function buildCredibilitySection(credibility) {
     const tier = credibility.tier || 3;
@@ -322,7 +373,7 @@ function buildCredibilitySection(credibility) {
             </div>
     `;
 
-    // Credibility details grid
+    // Credibility details
     const credDetails = [];
 
     if (credibility.bias_rating) {
@@ -362,7 +413,7 @@ function buildCredibilitySection(credibility) {
         html += '</div>';
     }
 
-    // Special tags (propaganda, etc.)
+    // Propaganda warning
     if (credibility.is_propaganda) {
         html += `
             <div class="credibility-warning propaganda-warning">
@@ -371,6 +422,7 @@ function buildCredibilitySection(credibility) {
         `;
     }
 
+    // Special tags
     if (credibility.special_tags && credibility.special_tags.length > 0) {
         html += `
             <div class="special-tags">
@@ -379,7 +431,7 @@ function buildCredibilitySection(credibility) {
         `;
     }
 
-    // MBFC link if available
+    // MBFC link
     if (credibility.mbfc_url) {
         html += `
             <div class="mbfc-link">
@@ -390,43 +442,22 @@ function buildCredibilitySection(credibility) {
         `;
     }
 
-    // Source of credibility data
-    if (credibility.source && credibility.source !== 'unknown') {
-        html += `
-            <div class="credibility-source">
-                Source: ${escapeHtml(credibility.source)}
-            </div>
-        `;
-    }
-
-    html += '</div>'; // End credibility-section
+    html += '</div>';
 
     return html;
 }
 
-function hideUrlStatus() {
-    if (urlFetchStatus) {
-        urlFetchStatus.style.display = 'none';
-    }
-}
-
-function getStatusIcon(type) {
-    const icons = {
-        loading: '⏳',
-        success: '✓',
-        error: '✕',
-        info: 'i'
-    };
-    return icons[type] || '•';
-}
+// ============================================
+// HELPER FUNCTIONS
+// ============================================
 
 function getTierColor(tier) {
     const colors = {
-        1: '#6B9B6B',  // Green - Highly Credible
-        2: '#8AAF6B',  // Light green - Credible
-        3: '#E8B84A',  // Yellow - Mixed
-        4: '#E89B4A',  // Orange - Low Credibility
-        5: '#F06449'   // Red - Unreliable
+        1: '#6B9B6B',
+        2: '#8AAF6B',
+        3: '#E8B84A',
+        4: '#E89B4A',
+        5: '#F06449'
     };
     return colors[tier] || '#9A9A9A';
 }
@@ -478,6 +509,7 @@ function escapeHtml(text) {
 function clearUrlInput() {
     if (articleUrl) articleUrl.value = '';
     hideUrlStatus();
+    hideArticleMetadata();
     setLastFetchedArticle(null);
 }
 
@@ -492,11 +524,9 @@ function initBiasModelTabs() {
         tab.addEventListener('click', () => {
             const model = tab.dataset.model;
 
-            // Update tab styling
             modelTabs.forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
 
-            // Show/hide analysis panels
             const gptAnalysis = document.getElementById('gptAnalysis');
             const claudeAnalysis = document.getElementById('claudeAnalysis');
             const consensusAnalysis = document.getElementById('consensusAnalysis');
@@ -519,11 +549,9 @@ function initManipulationTabs() {
         tab.addEventListener('click', () => {
             const tabName = tab.dataset.manipTab;
 
-            // Update tab styling
             manipInnerTabs.forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
 
-            // Show/hide content
             const summaryTab = document.getElementById('manipSummaryTab');
             const factsTab = document.getElementById('manipFactsTab');
 

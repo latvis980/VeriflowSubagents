@@ -1,0 +1,321 @@
+/* ============================================
+   ARTICLE METADATA PANEL STYLES
+   Add these styles to your main styles.css
+   ============================================ */
+
+/* URL Fetch Status - Enhanced */
+.url-fetch-status {
+    margin-top: 12px;
+    border-radius: 8px;
+    background: var(--bg-secondary, #f5f5f5);
+    border: 1px solid var(--border-color, #e0e0e0);
+    overflow: hidden;
+}
+
+.url-fetch-status.loading {
+    border-color: var(--color-info, #3498db);
+    background: rgba(52, 152, 219, 0.05);
+}
+
+.url-fetch-status.success {
+    border-color: var(--color-success, #6B9B6B);
+    background: var(--bg-secondary, #f9f9f9);
+}
+
+.url-fetch-status.error {
+    border-color: var(--color-error, #F06449);
+    background: rgba(240, 100, 73, 0.05);
+}
+
+.url-status-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    font-size: 14px;
+}
+
+.status-icon {
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.url-fetch-status.success .status-icon {
+    color: var(--color-success, #6B9B6B);
+}
+
+.url-fetch-status.error .status-icon {
+    color: var(--color-error, #F06449);
+}
+
+.url-fetch-status.loading .status-icon {
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* Article Metadata Panel */
+.article-metadata-panel {
+    border-top: 1px solid var(--border-color, #e0e0e0);
+    padding: 16px;
+}
+
+.metadata-section {
+    margin-bottom: 16px;
+}
+
+.metadata-section:last-child {
+    margin-bottom: 0;
+}
+
+/* Article Info Section */
+.article-info {
+    padding-bottom: 12px;
+}
+
+.metadata-row {
+    margin-bottom: 8px;
+}
+
+.metadata-row:last-child {
+    margin-bottom: 0;
+}
+
+.title-row .metadata-label {
+    display: block;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted, #888);
+    margin-bottom: 4px;
+}
+
+.title-value {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary, #1a1a1a);
+    line-height: 1.4;
+}
+
+.author-date-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: var(--text-secondary, #555);
+}
+
+.author-value {
+    font-weight: 500;
+}
+
+.date-value {
+    color: var(--text-muted, #888);
+}
+
+.metadata-separator {
+    color: var(--text-muted, #ccc);
+    font-size: 10px;
+}
+
+.publication-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+}
+
+.publication-name {
+    font-size: 13px;
+    color: var(--text-secondary, #555);
+}
+
+.article-type-badge,
+.section-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    background: var(--bg-tertiary, #eee);
+    color: var(--text-secondary, #666);
+}
+
+/* Credibility Section */
+.credibility-section {
+    background: var(--bg-tertiary, #f0f0f0);
+    border-radius: 6px;
+    padding: 12px;
+}
+
+.credibility-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.credibility-tier-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: white;
+}
+
+.credibility-tier-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary, #333);
+}
+
+/* Credibility Details Grid */
+.credibility-details {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.credibility-detail {
+    background: white;
+    border-radius: 4px;
+    padding: 8px 10px;
+    border-left: 3px solid var(--border-color, #ddd);
+}
+
+.credibility-detail .detail-label {
+    display: block;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    color: var(--text-muted, #888);
+    margin-bottom: 2px;
+}
+
+.credibility-detail .detail-value {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary, #333);
+}
+
+/* Bias classes */
+.credibility-detail.bias-left {
+    border-left-color: #5D9CEC;
+}
+
+.credibility-detail.bias-right {
+    border-left-color: #ED5565;
+}
+
+.credibility-detail.bias-center {
+    border-left-color: #A0D468;
+}
+
+/* Factual reporting classes */
+.credibility-detail.factual-high {
+    border-left-color: #6B9B6B;
+}
+
+.credibility-detail.factual-mostly {
+    border-left-color: #8AAF6B;
+}
+
+.credibility-detail.factual-mixed {
+    border-left-color: #E8B84A;
+}
+
+.credibility-detail.factual-low {
+    border-left-color: #F06449;
+}
+
+/* Warnings */
+.credibility-warning {
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 13px;
+    margin-bottom: 8px;
+}
+
+.propaganda-warning {
+    background: rgba(240, 100, 73, 0.1);
+    color: #c0392b;
+    border: 1px solid rgba(240, 100, 73, 0.3);
+}
+
+/* Special Tags */
+.special-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.special-tag {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    background: rgba(0, 0, 0, 0.05);
+    color: var(--text-secondary, #666);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+/* MBFC Link */
+.mbfc-link {
+    margin-top: 8px;
+}
+
+.mbfc-link a {
+    font-size: 12px;
+    color: var(--color-primary, #3498db);
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.mbfc-link a:hover {
+    text-decoration: underline;
+}
+
+/* Credibility Source */
+.credibility-source {
+    font-size: 11px;
+    color: var(--text-muted, #999);
+    margin-top: 8px;
+}
+
+/* Content Stats */
+.content-stats {
+    padding-top: 12px;
+    border-top: 1px solid var(--border-color, #e0e0e0);
+}
+
+.content-length {
+    font-size: 12px;
+    color: var(--text-muted, #888);
+}
+
+/* Responsive adjustments */
+@media (max-width: 480px) {
+    .credibility-details {
+        grid-template-columns: 1fr;
+    }
+
+    .author-date-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+    }
+
+    .metadata-separator {
+        display: none;
+    }
+}

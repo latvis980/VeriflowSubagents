@@ -245,6 +245,7 @@ body {
 .mode-icon {
     width: 44px;
     height: 44px;
+    border-radius: 12px;
     flex-shrink: 0;
     object-fit: contain;
 }
@@ -1938,3 +1939,4 @@ body {
 .session-info a:hover {
     text-decoration: underline;
 }
+

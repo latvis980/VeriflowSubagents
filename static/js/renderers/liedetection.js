@@ -1,5 +1,5 @@
 // static/js/renderers/liedetection.js - Lie Detection Rendering
-// VeriFlow Redesign - Minimalist Theme
+// VeriFlow Redesign - Minimalist Theme (FIXED)
 
 // ============================================
 // DISPLAY LIE DETECTION RESULTS
@@ -16,7 +16,7 @@ function displayLieDetectionResults() {
     const data = AppState.currentLieDetectionResults;
     const analysis = data.analysis || data;
 
-    // Score display
+    // Score display (credibility score - 0-100 where 100 = highly credible)
     const scoreElement = document.getElementById('lieScore');
     if (scoreElement) {
         const score = analysis.credibility_score || 0;
@@ -28,34 +28,60 @@ function displayLieDetectionResults() {
     const verdictElement = document.getElementById('lieVerdict');
     if (verdictElement) {
         const riskLevel = analysis.risk_level || 'Unknown';
-        verdictElement.textContent = `${riskLevel} Risk`;
+        verdictElement.textContent = `${riskLevel.toUpperCase()} RISK`;
         verdictElement.className = `lie-verdict risk-${riskLevel.toLowerCase()}`;
     }
 
-    // Justification/Assessment
+    // Overall Assessment (summary)
     const justificationElement = document.getElementById('lieJustification');
     if (justificationElement) {
         justificationElement.textContent = analysis.overall_assessment || '';
     }
 
-    // Markers detected
+    // Markers detected - THE MAIN FIX
     const markersContainer = document.getElementById('lieIndicators');
     if (markersContainer) {
         markersContainer.innerHTML = '';
 
         if (analysis.markers_detected && analysis.markers_detected.length > 0) {
             analysis.markers_detected.forEach(marker => {
-                markersContainer.appendChild(createMarkerCard(marker));
+                // Only show markers that are present (present: true)
+                if (marker.present !== false) {
+                    markersContainer.appendChild(createMarkerCard(marker));
+                }
             });
+            // If no markers were actually present after filtering
+            if (markersContainer.children.length === 0) {
+                markersContainer.innerHTML = '<p class="no-markers">No significant deception markers detected.</p>';
+            }
         } else {
             markersContainer.innerHTML = '<p class="no-markers">No significant deception markers detected.</p>';
         }
+    }
 
-        // Add positive indicators section
+    // Positive/Credibility Indicators
+    const positiveContainer = document.getElementById('liePositiveIndicators');
+    if (positiveContainer) {
+        positiveContainer.innerHTML = '';
+
         if (analysis.positive_indicators && analysis.positive_indicators.length > 0) {
-            const positiveSection = createPositiveIndicatorsSection(analysis.positive_indicators);
-            markersContainer.appendChild(positiveSection);
+            const list = createPositiveIndicatorsList(analysis.positive_indicators);
+            positiveContainer.appendChild(list);
+        } else {
+            positiveContainer.innerHTML = '<p class="no-indicators">No positive credibility indicators documented.</p>';
         }
+    }
+
+    // Conclusion
+    const conclusionElement = document.getElementById('lieConclusion');
+    if (conclusionElement) {
+        conclusionElement.textContent = analysis.conclusion || 'No conclusion available.';
+    }
+
+    // Detailed Reasoning
+    const reasoningElement = document.getElementById('lieDetailedReasoning');
+    if (reasoningElement) {
+        reasoningElement.textContent = analysis.reasoning || 'No detailed reasoning available.';
     }
 
     // Session info
@@ -82,44 +108,65 @@ function displayLieDetectionResults() {
 }
 
 // ============================================
-// CREATE MARKER CARD
+// CREATE MARKER CARD - FIXED VERSION
 // ============================================
+// Backend MarkerCategory schema:
+//   category: str (marker category name)
+//   present: bool
+//   severity: str (LOW, MEDIUM, HIGH)
+//   examples: List[str] (specific examples from text)
+//   explanation: str (why this matters)
 
 function createMarkerCard(marker) {
     const card = document.createElement('div');
-    card.className = 'marker-card';
 
-    const severity = marker.severity || marker.weight || 'medium';
-    const severityClass = getSeverityClass(severity);
+    const severity = (marker.severity || 'medium').toLowerCase();
+    card.className = `marker-card severity-${severity}`;
+
+    // Build examples list - marker.examples is an ARRAY
+    let examplesHtml = '';
+    if (marker.examples && Array.isArray(marker.examples) && marker.examples.length > 0) {
+        const exampleItems = marker.examples
+            .map(ex => `<li>"${escapeHtml(ex)}"</li>`)
+            .join('');
+        examplesHtml = `
+            <div class="marker-examples">
+                <span class="examples-label">Examples from text:</span>
+                <ul class="examples-list">${exampleItems}</ul>
+            </div>
+        `;
+    }
 
     card.innerHTML = `
         <div class="marker-header">
-            <span class="marker-type">${escapeHtml(marker.type || marker.category || 'Marker')}</span>
-            <span class="marker-severity ${severityClass}">${capitalizeFirst(severity)}</span>
+            <span class="marker-type">${escapeHtml(marker.category || 'Unknown Marker')}</span>
+            <span class="marker-severity ${getSeverityClass(severity)}">${severity.toUpperCase()}</span>
         </div>
-        <div class="marker-description">${escapeHtml(marker.description || marker.text || '')}</div>
-        ${marker.example ? `<div class="marker-example">"${escapeHtml(marker.example)}"</div>` : ''}
+        <div class="marker-explanation">${escapeHtml(marker.explanation || '')}</div>
+        ${examplesHtml}
     `;
 
     return card;
 }
 
 // ============================================
-// CREATE POSITIVE INDICATORS SECTION
+// CREATE POSITIVE INDICATORS LIST
 // ============================================
 
-function createPositiveIndicatorsSection(indicators) {
-    const section = document.createElement('div');
-    section.className = 'positive-indicators-section';
+function createPositiveIndicatorsList(indicators) {
+    const list = document.createElement('ul');
+    list.className = 'credibility-list';
 
-    section.innerHTML = `
-        <h4 class="section-title positive">Credibility Indicators</h4>
-        <ul class="positive-list">
-            ${indicators.map(indicator => `<li>${escapeHtml(typeof indicator === 'string' ? indicator : indicator.description || indicator.text)}</li>`).join('')}
-        </ul>
-    `;
+    indicators.forEach(indicator => {
+        const li = document.createElement('li');
+        const text = typeof indicator === 'string' 
+            ? indicator 
+            : (indicator.description || indicator.text || String(indicator));
+        li.textContent = text;
+        list.appendChild(li);
+    });
 
-    return section;
+    return list;
 }
 
 // ============================================
@@ -127,9 +174,10 @@ function createPositiveIndicatorsSection(indicators) {
 // ============================================
 
 function getLieScoreClass(score) {
-    if (score >= 80) return 'score-high';
-    if (score >= 60) return 'score-medium';
-    return 'score-low';
+    // Score is credibility (0-100, higher = more credible)
+    if (score >= 70) return 'score-high';      // Good credibility
+    if (score >= 40) return 'score-medium';    // Mixed signals
+    return 'score-low';                         // Low credibility
 }
 
 function getSeverityClass(severity) {
@@ -140,6 +188,7 @@ function getSeverityClass(severity) {
         case 'medium':
         case 'moderate':
             return 'severity-medium';
+        case 'low':
         default:
             return 'severity-low';
     }
@@ -148,4 +197,14 @@ function getSeverityClass(severity) {
 function capitalizeFirst(str) {
     if (!str) return '';
     return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+}
+
+// Ensure escapeHtml is available
+if (typeof escapeHtml !== 'function') {
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
 }

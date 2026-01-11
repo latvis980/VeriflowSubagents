@@ -1690,3 +1690,252 @@ body {
         padding: 0;
     }
 }
+
+/* ===========================================
+   Lie Detection - Additional/Fixed Styles
+   Add these to your style.css
+   =========================================== */
+
+/* Section containers */
+.lie-section {
+    margin-top: var(--space-5);
+    padding: var(--space-4);
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border-light);
+}
+
+.lie-section-title {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--color-text);
+    margin-bottom: var(--space-3);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.lie-section-title.positive {
+    color: var(--color-success);
+}
+
+/* Lie session info (separate from global session-info if needed) */
+.lie-session-info {
+    margin-top: var(--space-4);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--color-border-light);
+}
+
+/* Marker cards - Enhanced */
+.marker-card {
+    padding: var(--space-4);
+    background: var(--color-surface-hover);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-3);
+    border-left: 3px solid var(--color-border);
+}
+
+.marker-card.severity-high {
+    border-left-color: var(--color-error);
+    background: rgba(239, 68, 68, 0.05);
+}
+
+.marker-card.severity-medium {
+    border-left-color: var(--color-warning);
+    background: rgba(245, 158, 11, 0.05);
+}
+
+.marker-card.severity-low {
+    border-left-color: var(--color-success);
+    background: rgba(34, 197, 94, 0.05);
+}
+
+.marker-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-2);
+}
+
+.marker-type {
+    font-weight: 600;
+    font-size: var(--font-size-sm);
+    color: var(--color-text);
+}
+
+.marker-severity {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-sm);
+}
+
+.marker-severity.severity-high {
+    background: var(--color-error-light);
+    color: var(--color-error);
+}
+
+.marker-severity.severity-medium {
+    background: #FEF3C7;
+    color: #B45309;
+}
+
+.marker-severity.severity-low {
+    background: #DCFCE7;
+    color: var(--color-success);
+}
+
+/* Explanation text */
+.marker-explanation {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    line-height: 1.5;
+    margin-bottom: var(--space-3);
+}
+
+/* Examples section */
+.marker-examples {
+    margin-top: var(--space-3);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--color-border-light);
+}
+
+.examples-label {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: block;
+    margin-bottom: var(--space-2);
+}
+
+.examples-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.examples-list li {
+    font-size: var(--font-size-sm);
+    color: var(--color-text);
+    padding: var(--space-2) var(--space-3);
+    background: rgba(0, 0, 0, 0.03);
+    border-radius: var(--radius-sm);
+    margin-bottom: var(--space-2);
+    font-style: italic;
+    border-left: 2px solid var(--color-border);
+}
+
+.examples-list li:last-child {
+    margin-bottom: 0;
+}
+
+/* Positive indicators */
+.positive-indicators {
+    padding: var(--space-3);
+    background: rgba(34, 197, 94, 0.05);
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(34, 197, 94, 0.2);
+}
+
+.credibility-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.credibility-list li {
+    font-size: var(--font-size-sm);
+    color: var(--color-text);
+    padding: var(--space-2) 0;
+    padding-left: var(--space-4);
+    position: relative;
+}
+
+.credibility-list li::before {
+    content: '✓';
+    position: absolute;
+    left: 0;
+    color: var(--color-success);
+    font-weight: bold;
+}
+
+.no-indicators,
+.no-markers {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    font-style: italic;
+    padding: var(--space-3);
+}
+
+/* Conclusion section */
+.conclusion-text {
+    font-size: var(--font-size-base);
+    color: var(--color-text);
+    line-height: 1.6;
+}
+
+/* Detailed reasoning expandable */
+.detailed-reasoning {
+    margin-top: var(--space-4);
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+.detailed-reasoning summary {
+    padding: var(--space-3) var(--space-4);
+    background: var(--color-surface-hover);
+    cursor: pointer;
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    user-select: none;
+    transition: background 0.2s ease;
+}
+
+.detailed-reasoning summary:hover {
+    background: var(--color-border-light);
+}
+
+.detailed-reasoning[open] summary {
+    border-bottom: 1px solid var(--color-border-light);
+}
+
+.reasoning-text {
+    padding: var(--space-4);
+    font-size: var(--font-size-sm);
+    color: var(--color-text);
+    line-height: 1.6;
+    background: var(--color-surface);
+}
+
+/* Session info */
+.session-info {
+    margin-top: var(--space-4);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--color-border-light);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-secondary);
+}
+
+.session-info code {
+    font-family: var(--font-mono);
+    background: var(--color-surface-hover);
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+}
+
+.session-info .separator {
+    margin: 0 var(--space-2);
+    color: var(--color-border);
+}
+
+.session-info a {
+    color: var(--color-primary);
+    text-decoration: none;
+}
+
+.session-info a:hover {
+    text-decoration: underline;
+}

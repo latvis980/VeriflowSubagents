@@ -347,6 +347,7 @@
 
                     <!-- Lie Detection Results -->
                     <div id="lieDetectionResults" class="results-panel" style="display: none;">
+                        <!-- Score & Risk Summary -->
                         <div class="lie-score-container">
                             <div class="lie-score-visual">
                                 <span id="lieScore" class="lie-score-value">0</span>
@@ -356,7 +357,39 @@
                                 <p id="lieJustification" class="lie-justification"></p>
                             </div>
                         </div>
-                        <div id="lieIndicators" class="lie-indicators"></div>
+
+                        <!-- Deception Markers Section -->
+                        <div class="lie-section">
+                            <h3 class="lie-section-title">Deception Markers Found</h3>
+                            <div id="lieIndicators" class="lie-indicators"></div>
+                        </div>
+
+                        <!-- Credibility Indicators Section -->
+                        <div class="lie-section">
+                            <h3 class="lie-section-title positive">Credibility Indicators</h3>
+                            <div id="liePositiveIndicators" class="positive-indicators"></div>
+                        </div>
+
+                        <!-- Conclusion Section -->
+                        <div class="lie-section">
+                            <h3 class="lie-section-title">Conclusion</h3>
+                            <p id="lieConclusion" class="conclusion-text"></p>
+                        </div>
+
+                        <!-- Detailed Reasoning (Expandable) -->
+                        <details class="detailed-reasoning">
+                            <summary class="reasoning-toggle">View Detailed Reasoning</summary>
+                            <p id="lieDetailedReasoning" class="reasoning-text"></p>
+                        </details>
+
+                        <!-- Session Info -->
+                        <div class="session-info lie-session-info">
+                            Session ID: <code id="lieSessionId">-</code>
+                            <span class="separator">•</span>
+                            Processing Time: <span id="lieProcessingTime">0s</span>
+                            <span class="separator" id="lieR2Sep" style="display: none;">•</span>
+                            <a href="#" id="lieR2Link" target="_blank" style="display: none;">View Full Report</a>
+                        </div>
                     </div>
 
                     <!-- Manipulation Results -->

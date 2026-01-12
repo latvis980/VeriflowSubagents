@@ -1527,6 +1527,7 @@ body {
 
 .manipulation-fact-card {
     padding: var(--space-4);
+    padding-left: var(--space-5);
     background: var(--color-surface-hover);
     border-radius: var(--radius-md);
     margin-bottom: var(--space-3);

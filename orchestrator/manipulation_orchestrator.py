@@ -239,7 +239,7 @@ class ManipulationOrchestrator:
             # ================================================================
             # STAGE 1: Article Analysis
             # ================================================================
-            job_manager.add_progress(job_id, "📰 Analyzing article for agenda and bias...")
+            job_manager.add_progress(job_id, "Analyzing article for agenda and bias...")
             self._check_cancellation(job_id)
 
             # ✅ FIX 2: Build credibility context and call analyze_article OUTSIDE the if block

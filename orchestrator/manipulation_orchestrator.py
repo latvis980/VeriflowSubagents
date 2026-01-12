@@ -961,7 +961,8 @@ class ManipulationOrchestrator:
                 'what_got_right': report.what_article_got_right,
                 'misleading_elements': report.key_misleading_elements,
                 'justification': report.score_justification,
-                'recommendation': report.reader_recommendation
+                'recommendation': report.reader_recommendation,
+                'narrative_summary': report.narrative_summary
             },
             'facts_analyzed': facts_data,
             'manipulation_findings': findings_data,

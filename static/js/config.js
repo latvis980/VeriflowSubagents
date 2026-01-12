@@ -102,6 +102,7 @@ const AppState = {
 
     // Helper methods
     clearResults() {
+        // Clear JavaScript state
         this.currentLLMVerificationResults = null;
         this.currentFactCheckResults = null;
         this.currentKeyClaimsResults = null;
@@ -116,6 +117,32 @@ const AppState = {
             lieDetection: null,
             manipulation: null
         };
+
+        // Clear DOM containers to remove old rendered results
+        const containersToClean = [
+            'factsContainer',
+            'keyClaimsContainer', 
+            'biasContent',
+            'lieDetectionContent',
+            'manipFactsContainer',
+            'manipDetailedContent'
+        ];
+
+        containersToClean.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = '';
+        });
+
+        // Reset summary stats to zero
+        const statsToReset = [
+            'verifiedCount', 'issuesCount', 'unverifiedCount',
+            'kcTotalClaims', 'kcVerifiedCount', 'kcPartialCount', 'kcUnverifiedCount'
+        ];
+
+        statsToReset.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = '0';
+        });
     },
 
     closeAllStreams() {

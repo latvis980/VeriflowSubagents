@@ -319,18 +319,6 @@ function initEventListeners() {
 // ============================================
 
 function initUrlInputListeners() {
-    // Toggle URL/Text input
-    if (toggleUrlBtn) {
-        toggleUrlBtn.addEventListener('click', () => {
-            const isUrlVisible = urlInputContainer && urlInputContainer.style.display !== 'none';
-
-            if (isUrlVisible) {
-                showTextInput();
-            } else {
-                showUrlInput();
-            }
-        });
-    }
 
     // Fetch URL button
     if (fetchUrlBtn && articleUrl) {
@@ -359,10 +347,7 @@ function initUrlInputListeners() {
 
                 // ADD THIS LINE - Show the metadata panel
                 showArticleMetadata(result);
-
-                // Switch to text view to show content
-                showTextInput();
-
+                
             } catch (error) {
                 showUrlStatus('error', 'Failed to fetch: ' + error.message);
             }

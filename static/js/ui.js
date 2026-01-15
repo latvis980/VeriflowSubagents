@@ -99,16 +99,6 @@ function switchMode(mode) {
 
     // Hide content format indicator when switching modes
     hideContentFormatIndicator();
-
-    // Hide URL toggle button for LLM output mode (copy-paste only)
-    if (toggleUrlBtn) {
-        toggleUrlBtn.style.display = mode === 'llm-output' ? 'none' : '';
-    }
-
-    // Ensure text input is shown when switching modes (reset to default)
-    showTextInput();
-
-    console.log('Mode switched to:', mode);
 }
 
 function updatePlaceholder(mode) {
@@ -161,20 +151,18 @@ function switchResultTab(tabName) {
 // URL INPUT HANDLING
 // ============================================
 
+// URL input is now always visible, these are no-ops for backward compatibility
 function showUrlInput() {
-    if (urlInputContainer) urlInputContainer.style.display = 'block';
-    if (textInputContainer) textInputContainer.style.display = 'none';
-    updateToggleButton(true);
+    // Both are always visible now
 }
 
 function showTextInput() {
-    if (urlInputContainer) urlInputContainer.style.display = 'none';
-    if (textInputContainer) textInputContainer.style.display = 'block';
-    updateToggleButton(false);
+    // Both are always visible now
 }
 
 function updateToggleButton(isUrlMode) {
-    if (!toggleUrlBtn) return;
+    // No toggle button anymore
+}
 
     if (isUrlMode) {
         toggleUrlBtn.innerHTML = `

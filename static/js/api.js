@@ -467,21 +467,3 @@ async function runManipulationCheck(content) {
         throw error;
     }
 }
-
-// ============================================
-// EXPORT TO GLOBAL SCOPE
-// ============================================
-
-if (typeof window !== 'undefined') {
-    window.streamJobProgress = streamJobProgress;
-    window.fetchArticleFromUrl = fetchArticleFromUrl;
-    window.pollJobCompletion = pollJobCompletion;
-    window.runLLMVerification = runLLMVerification;
-    window.runFactCheck = runFactCheck;
-    window.runKeyClaimsCheck = runKeyClaimsCheck;
-    window.runBiasCheck = runBiasCheck;
-    window.runLieDetection = runLieDetection;
-    window.runManipulationCheck = runManipulationCheck;
-
-    console.log('✅ api.js: Functions exported to global scope');
-}

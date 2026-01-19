@@ -100,15 +100,3 @@ function initModalListeners() {
         });
     }
 }
-
-// ============================================
-// EXPORT TO GLOBAL SCOPE
-// ============================================
-
-if (typeof window !== 'undefined') {
-    window.showPlainTextModal = showPlainTextModal;
-    window.hidePlainTextModal = hidePlainTextModal;
-    window.initModalListeners = initModalListeners;
-
-    console.log('✅ modal.js: Functions exported to global scope');
-}

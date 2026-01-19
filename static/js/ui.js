@@ -99,6 +99,16 @@ function switchMode(mode) {
 
     // Hide content format indicator when switching modes
     hideContentFormatIndicator();
+
+    // Hide URL toggle button for LLM output mode (copy-paste only)
+    if (toggleUrlBtn) {
+        toggleUrlBtn.style.display = mode === 'llm-output' ? 'none' : '';
+    }
+
+    // Ensure text input is shown when switching modes (reset to default)
+    showTextInput();
+
+    console.log('Mode switched to:', mode);
 }
 
 function updatePlaceholder(mode) {
@@ -151,18 +161,20 @@ function switchResultTab(tabName) {
 // URL INPUT HANDLING
 // ============================================
 
-// URL input is now always visible, these are no-ops for backward compatibility
 function showUrlInput() {
-    // Both are always visible now
+    if (urlInputContainer) urlInputContainer.style.display = 'block';
+    if (textInputContainer) textInputContainer.style.display = 'none';
+    updateToggleButton(true);
 }
 
 function showTextInput() {
-    // Both are always visible now
+    if (urlInputContainer) urlInputContainer.style.display = 'none';
+    if (textInputContainer) textInputContainer.style.display = 'block';
+    updateToggleButton(false);
 }
 
 function updateToggleButton(isUrlMode) {
-    // No toggle button anymore
-}
+    if (!toggleUrlBtn) return;
 
     if (isUrlMode) {
         toggleUrlBtn.innerHTML = `
@@ -547,31 +559,4 @@ function initManipulationTabs() {
             if (factsTab) factsTab.style.display = tabName === 'facts' ? 'block' : 'none';
         });
     });
-}
-
-// ============================================
-// EXPORT TO GLOBAL SCOPE
-// ============================================
-
-if (typeof window !== 'undefined') {
-    window.showUrlStatus = showUrlStatus;
-    window.hideUrlStatus = hideUrlStatus;
-    window.showArticleMetadata = showArticleMetadata;
-    window.hideArticleMetadata = hideArticleMetadata;
-    window.updatePlaceholder = updatePlaceholder;
-    window.showError = showError;
-    window.switchMode = switchMode;
-    window.switchResultTab = switchResultTab;
-    window.setLoadingState = setLoadingState;
-    window.hideAllSections = hideAllSections;
-    window.showSection = showSection;
-    window.clearProgressLog = clearProgressLog;
-    window.addProgress = addProgress;
-    window.showContentFormatIndicator = showContentFormatIndicator;
-    window.hideContentFormatIndicator = hideContentFormatIndicator;
-    window.clearUrlInput = clearUrlInput;
-    window.initBiasModelTabs = initBiasModelTabs;
-    window.initManipulationTabs = initManipulationTabs;
-
-    console.log('✅ ui.js: Functions exported to global scope');
 }

@@ -249,30 +249,3 @@ function debounce(func, wait) {
         timeout = setTimeout(later, wait);
     };
 }
-
-// ============================================
-// EXPORT TO GLOBAL SCOPE
-// ============================================
-
-if (typeof window !== 'undefined') {
-    window.escapeHtml = escapeHtml;
-    window.truncateText = truncateText;
-    window.formatNumber = formatNumber;
-    window.formatDuration = formatDuration;
-    window.isValidUrl = isValidUrl;
-    window.getDomainFromUrl = getDomainFromUrl;
-    window.hasHTMLLinks = hasHTMLLinks;
-    window.countLinks = countLinks;
-    window.getScoreClass = getScoreClass;
-    window.getScoreLabel = getScoreLabel;
-    window.getScoreColor = getScoreColor;
-    window.formatDate = formatDate;
-    window.getRelativeTime = getRelativeTime;
-    window.downloadAsJson = downloadAsJson;
-    window.copyToClipboard = copyToClipboard;
-    window.createElement = createElement;
-    window.clearElement = clearElement;
-    window.debounce = debounce;
-
-    console.log('✅ utils.js: Functions exported to global scope');
-}

@@ -319,51 +319,72 @@ function initEventListeners() {
 // ============================================
 
 function initUrlInputListeners() {
+    console.log('🔧 initUrlInputListeners: Starting...');
+    console.log('🔍 fetchUrlBtn:', fetchUrlBtn);
+    console.log('🔍 articleUrl:', articleUrl);
 
-    // DEBUG: Check if elements exist
-    console.log('fetchUrlBtn:', fetchUrlBtn);
-    console.log('articleUrl:', articleUrl);
-    
     // Fetch URL button
     if (fetchUrlBtn && articleUrl) {
+        console.log('✅ Both elements found, attaching listener...');
+
         fetchUrlBtn.addEventListener('click', async () => {
+            console.log('🔥 FETCH BUTTON CLICKED!');
+
             const url = articleUrl.value.trim();
+            console.log('📝 URL value:', url);
 
             if (!url) {
+                console.warn('⚠️ No URL provided');
                 showUrlStatus('error', 'Please enter a URL');
                 return;
             }
 
             if (!isValidUrl(url)) {
+                console.warn('⚠️ Invalid URL format');
                 showUrlStatus('error', 'Please enter a valid URL');
                 return;
             }
 
             try {
+                console.log('⏳ Starting fetch...');
                 showUrlStatus('loading', 'Fetching article...');
+
                 const result = await fetchArticleFromUrl(url);
+                console.log('✅ Fetch successful:', result);
 
                 if (htmlInput) {
                     htmlInput.value = result.content;
+                    console.log('✅ Content inserted into textarea');
                 }
 
                 showUrlStatus('success', `Fetched: ${result.title || result.domain}`, result);
-
-                // ADD THIS LINE - Show the metadata panel
                 showArticleMetadata(result);
-                
+
             } catch (error) {
+                console.error('❌ Fetch failed:', error);
                 showUrlStatus('error', 'Failed to fetch: ' + error.message);
             }
         });
 
+        console.log('✅ Click listener attached successfully');
+
         // Enter key in URL input
         articleUrl.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
+                console.log('⏎ Enter key pressed in URL input');
                 fetchUrlBtn.click();
             }
         });
+
+        console.log('✅ Enter key listener attached');
+    } else {
+        console.error('❌ Missing elements!', {
+            fetchUrlBtn: !!fetchUrlBtn,
+            articleUrl: !!articleUrl
+        });
     }
+
+    console.log('✅ initUrlInputListeners: Complete');
 }
 
 // ============================================
@@ -371,22 +392,43 @@ function initUrlInputListeners() {
 // ============================================
 
 function init() {
-    initEventListeners();
-    initUrlInputListeners();
-    initModalListeners();
-    initBiasModelTabs();
-    initManipulationTabs();
+    console.log('🚀 VeriFlow: Initializing...');
 
-    // Set initial mode
-    updatePlaceholder(AppState.currentMode);
+    try {
+        initEventListeners();
+        initUrlInputListeners();
+        initModalListeners();
 
-    console.log('VeriFlow initialized');
-    console.log('Modules: config, utils, ui, modal, api, renderers');
+        // These functions are in ui.js - call them safely
+        if (typeof initBiasModelTabs === 'function') {
+            initBiasModelTabs();
+        } else {
+            console.warn('⚠️ initBiasModelTabs not available yet');
+        }
+
+        if (typeof initManipulationTabs === 'function') {
+            initManipulationTabs();
+        } else {
+            console.warn('⚠️ initManipulationTabs not available yet');
+        }
+
+        // Set initial mode
+        updatePlaceholder(AppState.currentMode);
+
+        console.log('✅ VeriFlow initialized successfully');
+        console.log('📦 Modules: config, utils, ui, modal, api, renderers');
+    } catch (error) {
+        console.error('❌ Initialization error:', error);
+    }
 }
 
 // Run initialization when DOM is ready
 if (document.readyState === 'loading') {
+    console.log('⏳ Waiting for DOM...');
     document.addEventListener('DOMContentLoaded', init);
 } else {
+    console.log('✅ DOM ready, initializing now...');
     init();
 }
+
+console.log('📄 app.js: File loaded');

@@ -27,7 +27,7 @@ from langsmith import traceable
 import time
 import asyncio
 from typing import List, Dict, Any, Optional, Tuple
-from datetime import datetime
+from datetime import datetime, timezone
 
 from utils.logger import fact_logger
 from utils.file_manager import FileManager
@@ -42,7 +42,7 @@ from agents.mode_router import ModeRouter
 from orchestrator.key_claims_orchestrator import KeyClaimsOrchestrator
 from orchestrator.bias_check_orchestrator import BiasCheckOrchestrator
 from orchestrator.manipulation_orchestrator import ManipulationOrchestrator
-from orchestrator.lie_detection_orchestrator import LieDetectionOrchestrator
+from orchestrator.lie_detector_orchestrator import LieDetectorOrchestrator
 
 
 class CancelledException(Exception):
@@ -70,10 +70,10 @@ class ComprehensiveOrchestrator:
         self.mode_router = ModeRouter()
 
         # Stage 2 orchestrators (initialized on demand)
-        self._key_claims_orchestrator = None
-        self._bias_orchestrator = None
-        self._manipulation_orchestrator = None
-        self._lie_detection_orchestrator = None
+        self._key_claims_orchestrator: Optional[KeyClaimsOrchestrator] = None
+        self._bias_orchestrator: Optional[BiasCheckOrchestrator] = None
+        self._manipulation_orchestrator: Optional[ManipulationOrchestrator] = None
+        self._lie_detection_orchestrator: Optional[LieDetectorOrchestrator] = None
 
         # R2 uploader for audit storage
         try:
@@ -91,42 +91,47 @@ class ComprehensiveOrchestrator:
     # LAZY INITIALIZATION OF MODE ORCHESTRATORS
     # =========================================================================
 
-    def _get_key_claims_orchestrator(self):
+    def _get_key_claims_orchestrator(self) -> KeyClaimsOrchestrator:
         """Lazy init for key claims orchestrator"""
         if self._key_claims_orchestrator is None:
             self._key_claims_orchestrator = KeyClaimsOrchestrator(self.config)
         return self._key_claims_orchestrator
 
-    def _get_bias_orchestrator(self):
+    def _get_bias_orchestrator(self) -> BiasCheckOrchestrator:
         """Lazy init for bias orchestrator"""
         if self._bias_orchestrator is None:
             self._bias_orchestrator = BiasCheckOrchestrator(self.config)
         return self._bias_orchestrator
 
-    def _get_manipulation_orchestrator(self):
+    def _get_manipulation_orchestrator(self) -> ManipulationOrchestrator:
         """Lazy init for manipulation orchestrator"""
         if self._manipulation_orchestrator is None:
             self._manipulation_orchestrator = ManipulationOrchestrator(self.config)
         return self._manipulation_orchestrator
 
-    def _get_lie_detection_orchestrator(self):
+    def _get_lie_detection_orchestrator(self) -> LieDetectorOrchestrator:
         """Lazy init for lie detection orchestrator"""
         if self._lie_detection_orchestrator is None:
-            self._lie_detection_orchestrator = LieDetectionOrchestrator(self.config)
+            self._lie_detection_orchestrator = LieDetectorOrchestrator(self.config)
         return self._lie_detection_orchestrator
 
     # =========================================================================
     # HELPER METHODS
     # =========================================================================
 
-    def _check_cancellation(self, job_id: str):
+    def _check_cancellation(self, job_id: str) -> None:
         """Check if job has been cancelled"""
         if job_manager.is_cancelled(job_id):
             raise CancelledException("Job cancelled by user")
 
-    def _send_stage_update(self, job_id: str, stage: str, message: str = None):
+    def _send_stage_update(self, job_id: str, stage: str, message: Optional[str] = None) -> None:
         """Send a stage-specific progress update"""
-        job_manager.add_progress(job_id, message or f"Stage: {stage}", extra={"stage": stage})
+        # job_manager.add_progress uses 'details' not 'extra'
+        job_manager.add_progress(
+            job_id, 
+            message or f"Stage: {stage}", 
+            details={"stage": stage}
+        )
 
     # =========================================================================
     # STAGE 1: PRE-ANALYSIS
@@ -146,7 +151,7 @@ class ComprehensiveOrchestrator:
         2. Verify source credibility
         3. Route to appropriate modes
         """
-        stage1_results = {
+        stage1_results: Dict[str, Any] = {
             "content_classification": None,
             "source_verification": None,
             "author_info": None,  # Future enhancement
@@ -174,10 +179,10 @@ class ComprehensiveOrchestrator:
                     "is_likely_llm_output": False,
                     "reference_count": 0
                 }
-                job_manager.add_progress(job_id, f"⚠️ Classification error, using defaults")
+                job_manager.add_progress(job_id, "⚠️ Classification error, using defaults")
 
             # Send partial result for progressive UI
-            job_manager.add_progress(job_id, "", extra={
+            job_manager.add_progress(job_id, "Classification complete", details={
                 "partial_result": {"content_classification": stage1_results["content_classification"]}
             })
 
@@ -187,25 +192,28 @@ class ComprehensiveOrchestrator:
 
             # Determine URL for verification
             verify_url = source_url
-            if not verify_url and classification_result.classification:
+            if not verify_url and classification_result.success and classification_result.classification:
                 ref_urls = classification_result.classification.reference_urls
                 if ref_urls:
                     verify_url = ref_urls[0]
 
             if verify_url:
+                # verify_source takes content and run_mbfc_if_missing as main params
                 verification_result = await self.source_verifier.verify_source(
                     content=content,
-                    provided_url=verify_url,
                     run_mbfc_if_missing=True
                 )
 
-                if verification_result.success:
+                # Check verification_successful on the report (not success on result)
+                if verification_result.report.verification_successful:
                     stage1_results["source_verification"] = {
                         "domain": verification_result.report.domain,
                         "credibility_tier": verification_result.report.credibility_tier,
-                        "tier_label": verification_result.report.tier_label,
+                        "tier_description": verification_result.report.tier_description,
                         "verification_source": verification_result.report.verification_source,
-                        "mbfc_data": verification_result.report.mbfc_data,
+                        "bias_rating": verification_result.report.bias_rating,
+                        "factual_reporting": verification_result.report.factual_reporting,
+                        "is_propaganda": verification_result.report.is_propaganda,
                         "verification_successful": verification_result.report.verification_successful
                     }
                     job_manager.add_progress(
@@ -214,14 +222,14 @@ class ComprehensiveOrchestrator:
                     )
                 else:
                     stage1_results["source_verification"] = {
-                        "error": verification_result.report.error if verification_result.report else "Verification failed"
+                        "error": verification_result.report.error if verification_result.report.error else "Verification failed"
                     }
             else:
                 stage1_results["source_verification"] = {"status": "no_url_to_verify"}
                 job_manager.add_progress(job_id, "ℹ️ No source URL to verify")
 
             # Send partial result
-            job_manager.add_progress(job_id, "", extra={
+            job_manager.add_progress(job_id, "Source verification complete", details={
                 "partial_result": {"source_verification": stage1_results["source_verification"]}
             })
 
@@ -230,7 +238,7 @@ class ComprehensiveOrchestrator:
             self._check_cancellation(job_id)
 
             routing_result = await self.mode_router.route(
-                content_classification=stage1_results["content_classification"],
+                content_classification=stage1_results["content_classification"] or {},
                 source_verification=stage1_results["source_verification"],
                 author_info=stage1_results["author_info"]
             )
@@ -256,7 +264,7 @@ class ComprehensiveOrchestrator:
                 }
 
             # Send partial result
-            job_manager.add_progress(job_id, "", extra={
+            job_manager.add_progress(job_id, "Mode routing complete", details={
                 "partial_result": {"mode_routing": stage1_results["mode_routing"]}
             })
 
@@ -288,8 +296,8 @@ class ComprehensiveOrchestrator:
             self._check_cancellation(job_id)
 
             # Get source context for modes that need it
-            source_context = stage1_results.get("content_classification", {})
-            source_credibility = stage1_results.get("source_verification", {})
+            source_context = stage1_results.get("content_classification") or {}
+            source_credibility = stage1_results.get("source_verification") or {}
 
             if mode_id == "key_claims_analysis":
                 orchestrator = self._get_key_claims_orchestrator()
@@ -307,10 +315,12 @@ class ComprehensiveOrchestrator:
                 # Extract publication info if available
                 publication_name = source_credibility.get("domain", "")
 
+                # BiasCheckOrchestrator.process_with_progress takes: text, publication_url, publication_name, source_credibility, job_id
                 result = await orchestrator.process_with_progress(
-                    text_content=content,
-                    job_id=job_id,
-                    publication_name=publication_name
+                    text=content,
+                    publication_name=publication_name,
+                    source_credibility=source_credibility if source_credibility else None,
+                    job_id=job_id
                 )
                 return (mode_id, result, None)
 
@@ -318,26 +328,28 @@ class ComprehensiveOrchestrator:
                 orchestrator = self._get_manipulation_orchestrator()
 
                 result = await orchestrator.process_with_progress(
-                    text_content=content,
+                    content=content,
                     job_id=job_id,
-                    source_context=source_context,
-                    source_credibility=source_credibility
+                    source_info=source_credibility.get("domain", "Unknown"),
+                    source_credibility=source_credibility if source_credibility else None
                 )
                 return (mode_id, result, None)
 
             elif mode_id == "lie_detection":
                 orchestrator = self._get_lie_detection_orchestrator()
 
+                # LieDetectorOrchestrator.process_with_progress takes: text, job_id, url, publication_date, article_source, source_credibility
                 result = await orchestrator.process_with_progress(
-                    text_content=content,
-                    job_id=job_id
+                    text=content,
+                    job_id=job_id,
+                    source_credibility=source_credibility if source_credibility else None
                 )
                 return (mode_id, result, None)
 
             elif mode_id == "llm_output_verification":
                 # LLM output verification uses a different pipeline
-                from orchestrator.fact_check_orchestrator import FactCheckOrchestrator
-                orchestrator = FactCheckOrchestrator(self.config)
+                from orchestrator.llm_output_orchestrator import LLMInterpretationOrchestrator
+                orchestrator = LLMInterpretationOrchestrator(self.config)
 
                 result = await orchestrator.process_with_progress(
                     html_content=content,
@@ -368,7 +380,8 @@ class ComprehensiveOrchestrator:
         """
         self._send_stage_update(job_id, "mode_execution", "📊 Running selected analysis modes...")
 
-        selected_modes = stage1_results.get("mode_routing", {}).get("selected_modes", ["key_claims_analysis"])
+        mode_routing = stage1_results.get("mode_routing") or {}
+        selected_modes = mode_routing.get("selected_modes", ["key_claims_analysis"])
 
         job_manager.add_progress(
             job_id,
@@ -387,8 +400,8 @@ class ComprehensiveOrchestrator:
         execution_time = time.time() - start_time
 
         # Process results
-        mode_reports = {}
-        mode_errors = {}
+        mode_reports: Dict[str, Any] = {}
+        mode_errors: Dict[str, str] = {}
 
         for result in results:
             if isinstance(result, CancelledException):
@@ -396,15 +409,15 @@ class ComprehensiveOrchestrator:
             elif isinstance(result, Exception):
                 fact_logger.logger.error(f"❌ Mode execution error: {result}")
                 continue
+            elif isinstance(result, tuple) and len(result) == 3:
+                mode_id, mode_result, error = result
 
-            mode_id, mode_result, error = result
-
-            if error:
-                mode_errors[mode_id] = error
-                job_manager.add_progress(job_id, f"⚠️ {mode_id} failed: {error}")
-            elif mode_result:
-                mode_reports[mode_id] = mode_result
-                job_manager.add_progress(job_id, f"✅ {mode_id} complete")
+                if error:
+                    mode_errors[mode_id] = error
+                    job_manager.add_progress(job_id, f"⚠️ {mode_id} failed: {error}")
+                elif mode_result:
+                    mode_reports[mode_id] = mode_result
+                    job_manager.add_progress(job_id, f"✅ {mode_id} complete")
 
         fact_logger.logger.info(
             f"⚡ Stage 2 complete in {execution_time:.1f}s",
@@ -446,11 +459,10 @@ class ComprehensiveOrchestrator:
         """
         self._send_stage_update(job_id, "synthesis", "🔬 Synthesizing final report...")
 
-        # For now, create a basic synthesis
         mode_reports = stage2_results.get("mode_reports", {})
 
         # Extract key metrics from each mode
-        synthesis = {
+        synthesis: Dict[str, Any] = {
             "overall_assessment": "pending_full_implementation",
             "credibility_indicators": [],
             "key_findings": [],
@@ -607,7 +619,7 @@ class ComprehensiveOrchestrator:
             # ================================================================
             processing_time = time.time() - start_time
 
-            final_result = {
+            final_result: Dict[str, Any] = {
                 "success": True,
                 "session_id": session_id,
                 "processing_time": round(processing_time, 2),
@@ -627,7 +639,7 @@ class ComprehensiveOrchestrator:
                 "synthesis_report": stage3_results,
 
                 # Metadata
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "version": "1.0.0"
             }
 
@@ -669,11 +681,11 @@ if __name__ == "__main__":
     load_dotenv()
 
     async def test():
-        config = {
-            "openai_api_key": os.getenv("OPENAI_API_KEY"),
-            "anthropic_api_key": os.getenv("ANTHROPIC_API_KEY"),
-            "brave_api_key": os.getenv("BRAVE_API_KEY")
-        }
+        config = type('Config', (), {
+            'openai_api_key': os.getenv("OPENAI_API_KEY"),
+            'brave_api_key': os.getenv("BRAVE_API_KEY"),
+            'browserless_endpoint': os.getenv("BROWSER_PLAYWRIGHT_ENDPOINT_PRIVATE")
+        })()
 
         orchestrator = ComprehensiveOrchestrator(config)
 
@@ -691,8 +703,7 @@ if __name__ == "__main__":
         """
 
         # Create test job
-        from utils.job_manager import job_manager
-        job_id = job_manager.create_job()
+        job_id = job_manager.create_job(content=test_content)
 
         print(f"Testing with job_id: {job_id}")
 
@@ -701,11 +712,11 @@ if __name__ == "__main__":
             job_id=job_id
         )
 
-        print(f"\n✅ Result:")
+        print("\n✅ Result:")
         print(f"  Session: {result['session_id']}")
         print(f"  Processing Time: {result['processing_time']}s")
-        print(f"  Content Type: {result['content_classification'].get('content_type')}")
-        print(f"  Selected Modes: {result['mode_routing'].get('selected_modes')}")
+        print(f"  Content Type: {result['content_classification'].get('content_type') if result['content_classification'] else 'N/A'}")
+        print(f"  Selected Modes: {result['mode_routing'].get('selected_modes') if result['mode_routing'] else []}")
         print(f"  Mode Reports: {list(result['mode_reports'].keys())}")
         print(f"  Flags: {len(result['synthesis_report'].get('flags', []))}")
 

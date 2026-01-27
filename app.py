@@ -13,6 +13,8 @@ from orchestrator.bias_check_orchestrator import BiasCheckOrchestrator
 from orchestrator.lie_detector_orchestrator import LieDetectorOrchestrator
 from orchestrator.key_claims_orchestrator import KeyClaimsOrchestrator
 from orchestrator.manipulation_orchestrator import ManipulationOrchestrator
+from orchestrator.comprehensive_orchestrator import ComprehensiveOrchestrator
+
 
 from utils.logger import fact_logger
 from utils.langsmith_config import langsmith_config
@@ -227,6 +229,102 @@ def check_facts():
             "error": str(e),
             "message": "An error occurred during fact checking"
         }), 500
+
+@app.route('/api/comprehensive-analysis', methods=['POST'])
+def start_comprehensive_analysis():
+    """
+    Start comprehensive analysis pipeline
+
+    Request body:
+    {
+        "content": "text to analyze",
+        "source_url": "optional source URL",
+        "user_preferences": {  // optional
+            "force_include": ["mode_id"],
+            "force_exclude": ["mode_id"]
+        }
+    }
+
+    Response:
+    {
+        "job_id": "uuid",
+        "status": "started",
+        "message": "Comprehensive analysis started"
+    }
+    """
+    try:
+        data = request.get_json()
+
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+
+        content = data.get('content', '').strip()
+
+        if not content:
+            return jsonify({"error": "Content is required"}), 400
+
+        # Optional parameters
+        source_url = data.get('source_url', '').strip() or None
+        user_preferences = data.get('user_preferences', {})
+
+        # Create job
+        job_id = job_manager.create_job(content=content)
+
+        fact_logger.logger.info(
+            f"🔬 Starting comprehensive analysis job: {job_id}",
+            extra={
+                "job_id": job_id,
+                "content_length": len(content),
+                "has_source_url": source_url is not None
+            }
+        )
+
+        # Start background task
+        def run_comprehensive_task():
+            import asyncio
+
+            async def _run():
+                try:
+                    orchestrator = ComprehensiveOrchestrator(config)
+                    result = await orchestrator.process_with_progress(
+                        content=content,
+                        job_id=job_id,
+                        source_url=source_url,
+                        user_preferences=user_preferences
+                    )
+                    return result
+                except Exception as e:
+                    fact_logger.logger.error(f"❌ Comprehensive analysis error: {e}")
+                    import traceback
+                    fact_logger.logger.error(f"Traceback: {traceback.format_exc()}")
+                    job_manager.fail_job(job_id, str(e))
+                    raise
+
+            # Get or create event loop
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_closed():
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+            loop.run_until_complete(_run())
+
+        # Start in thread
+        thread = threading.Thread(target=run_comprehensive_task)
+        thread.start()
+
+        return jsonify({
+            "job_id": job_id,
+            "status": "started",
+            "message": "Comprehensive analysis started"
+        })
+
+    except Exception as e:
+        fact_logger.logger.error(f"❌ Failed to start comprehensive analysis: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/key-claims', methods=['POST'])
 def check_key_claims():

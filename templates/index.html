@@ -472,6 +472,7 @@
                         </div>
 
                         <!-- Overall Assessment Section -->
+                        <!-- Overall Assessment Section -->
                         <div class="comprehensive-section synthesis-section">
                             <h3 class="section-title">
                                 <span class="section-icon">🔬</span>
@@ -496,37 +497,34 @@
                                 </div>
                             </div>
 
-                            <!-- Things to Watch Out For -->
-                            <div id="flagsSection" class="flags-section" style="display: none;">
-                                <h4 class="subsection-title">⚠️ Things to Watch Out For</h4>
-                                <div id="flagsContainer" class="flags-list">
-                                    <!-- Populated by JS -->
+                            <!-- THE MAIN OUTPUT: Human-readable summary -->
+                            <div id="synthesisSummarySection" class="synthesis-summary-section">
+                                <h4 class="subsection-title">📋 Analysis Summary</h4>
+                                <div id="synthesisSummaryContainer" class="synthesis-summary-content">
+                                    <p class="placeholder-text">Analysis in progress...</p>
                                 </div>
                             </div>
 
-                            <!-- What We Discovered -->
-                            <div id="keyFindingsSection" class="key-findings-section" style="display: none;">
-                                <h4 class="subsection-title">📌 What We Discovered</h4>
-                                <div id="keyFindingsContainer" class="findings-list">
-                                    <!-- Populated by JS -->
-                                </div>
+                            <!-- Key Concerns (if any) -->
+                            <div id="keyConcernsSection" class="concerns-section" style="display: none;">
+                                <h4 class="subsection-title">⚠️ Key Concerns</h4>
+                                <ul id="keyConcernsContainer" class="concerns-list"></ul>
                             </div>
 
-                            <!-- Conflicting Information -->
-                            <div id="contradictionsSection" class="contradictions-section" style="display: none;">
-                                <h4 class="subsection-title">⚡ Conflicting Information</h4>
-                                <div id="contradictionsContainer" class="contradictions-list">
-                                    <!-- Populated by JS -->
-                                </div>
+                            <!-- Positive Indicators (if any) -->
+                            <div id="positiveIndicatorsSection" class="positives-section" style="display: none;">
+                                <h4 class="subsection-title">✅ Positive Indicators</h4>
+                                <ul id="positiveIndicatorsContainer" class="positives-list"></ul>
                             </div>
 
-                            <!-- Our Recommendations -->
+                            <!-- Recommendations -->
                             <div id="recommendationsSection" class="recommendations-section" style="display: none;">
                                 <h4 class="subsection-title">💡 Our Recommendations</h4>
-                                <ul id="recommendationsContainer" class="recommendations-list">
-                                    <!-- Populated by JS -->
-                                </ul>
+                                <ul id="recommendationsContainer" class="recommendations-list"></ul>
                             </div>
+
+                            <!-- Analysis Notes (if any limitations) -->
+                            <div id="analysisNotesContainer" class="analysis-notes-section" style="display: none;"></div>
                         </div>
 
                         <!-- Session Info -->

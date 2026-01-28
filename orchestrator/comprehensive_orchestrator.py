@@ -178,15 +178,7 @@ class ComprehensiveOrchestrator:
             classification_result = await self.content_classifier.classify(content)
 
             if classification_result.success:
-                stage1_results["content_classification"] = {
-                    "content_type": classification_result.classification.content_type,
-                    "realm": classification_result.classification.realm,
-                    "sub_realm": classification_result.classification.sub_realm,
-                    "purpose": classification_result.classification.purpose,
-                    "contains_references": classification_result.classification.contains_references,
-                    "reference_style": classification_result.classification.reference_style,
-                    "llm_characteristics": classification_result.classification.llm_characteristics.model_dump() if classification_result.classification.llm_characteristics else {}
-                }
+                stage1_results["content_classification"] = classification_result.classification.model_dump()
                 job_manager.add_progress(
                     job_id,
                     f"✅ Content classified: {classification_result.classification.content_type} ({classification_result.classification.realm})"

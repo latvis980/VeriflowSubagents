@@ -380,9 +380,9 @@ class PublicationBiasDetector:
             fact_logger.logger.error(f"❌ Failed to save to Supabase: {e}")
             return False
 
-    async def lookup_mbfc(self, domain: str) -> Optional['MBFCResult']:
+    async def lookup_mbfc(self, domain: str) -> Optional[MBFCResult]:
         """
-        Look up publication on MBFC using dedicated MBFC scraper.
+        Look up publication on MBFC using dedicated MBFC scraper with ad blocking.
 
         Args:
             domain: Clean domain (e.g., "cnn.com")
@@ -414,15 +414,13 @@ class PublicationBiasDetector:
             mbfc_url = None
             for result in results.results[:5]:
                 url = result.get('url', '')
-                # Skip blog posts, comparison pages, etc.
-                if '/202' in url:  # Blog post URLs contain year
+                if '/202' in url:  # Skip blog posts
                     continue
                 if 'mediabiasfactcheck.com' in url and '-bias' in url:
                     mbfc_url = url
                     break
 
             if not mbfc_url:
-                # Fall back to first result if no better match
                 for result in results.results[:3]:
                     url = result.get('url', '')
                     if 'mediabiasfactcheck.com' in url:
@@ -435,8 +433,7 @@ class PublicationBiasDetector:
 
             fact_logger.logger.info(f"Found MBFC page: {mbfc_url}")
 
-            # Step 3: Use dedicated MBFC scraper instead of generic scraper
-            # Initialize browser pool if needed
+            # Step 3: Initialize browser pool if needed
             await self.scraper._initialize_browser_pool(min_browsers=1)
 
             if not self.scraper.browser_pool:
@@ -447,18 +444,11 @@ class PublicationBiasDetector:
             page = None
 
             try:
+                # Create new page
                 page = await browser.new_page()
 
-                # Set headers
-                await page.set_extra_http_headers({
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
-                })
-
-                # Navigate
-                await page.goto(mbfc_url, wait_until="domcontentloaded", timeout=15000)
-                await asyncio.sleep(1)  # Wait for content to stabilize
-
-                # Use MBFC scraper to extract data
+                # IMPORTANT: Let the MBFC scraper handle everything
+                # including ad blocking setup and navigation
                 extracted_data = await self.mbfc_scraper.scrape_mbfc_page(page, mbfc_url)
 
                 if not extracted_data:
@@ -490,8 +480,7 @@ class PublicationBiasDetector:
                     extra={
                         "bias": mbfc_result.bias_rating,
                         "factual": mbfc_result.factual_reporting,
-                        "credibility": mbfc_result.credibility_rating,
-                        "freedom": mbfc_result.country_freedom_rating
+                        "credibility": mbfc_result.credibility_rating
                     }
                 )
 

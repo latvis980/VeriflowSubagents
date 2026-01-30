@@ -233,7 +233,7 @@ async function handleCheckContent() {
 /**
  * UPDATE streamJobProgress to handle cancellation status
  */
-function streamJobProgress(jobId, emoji = '⏳') {
+function streamJobProgress(jobId, emoji = '🔵') {
     return new Promise((resolve, reject) => {
         const eventSource = new EventSource(`/api/job/${jobId}/stream`);
         activeEventSources.push(eventSource);

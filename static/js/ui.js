@@ -300,7 +300,7 @@ function hideUrlStatus() {
 
 function getStatusIcon(type) {
     const icons = {
-        loading: '⏳',
+        loading: '🔵',
         success: '✓',
         error: '✕',
         info: 'i'

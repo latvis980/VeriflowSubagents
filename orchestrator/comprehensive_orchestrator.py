@@ -298,7 +298,8 @@ class ComprehensiveOrchestrator:
                     text_content=content,
                     job_id=job_id,
                     source_context=source_context,
-                    source_credibility=source_credibility
+                    source_credibility=source_credibility,
+                    standalone=False  # ADD THIS
                 )
                 return (mode_id, result, None)
 
@@ -310,7 +311,8 @@ class ComprehensiveOrchestrator:
                     text=content,
                     publication_name=publication_name,
                     source_credibility=source_credibility if source_credibility else None,
-                    job_id=job_id
+                    job_id=job_id,
+                    standalone=False  # ADD THIS
                 )
                 return (mode_id, result, None)
 
@@ -321,7 +323,8 @@ class ComprehensiveOrchestrator:
                     content=content,
                     job_id=job_id,
                     source_info=source_credibility.get("domain", "Unknown"),
-                    source_credibility=source_credibility if source_credibility else None
+                    source_credibility=source_credibility if source_credibility else None,
+                    standalone=False  # ADD THIS
                 )
                 return (mode_id, result, None)
 
@@ -331,9 +334,9 @@ class ComprehensiveOrchestrator:
                 result = await orchestrator.process_with_progress(
                     text=content,
                     job_id=job_id,
-                    source_credibility=source_credibility if source_credibility else None
+                    source_credibility=source_credibility if source_credibility else None,
+                    standalone=False  # ADD THIS
                 )
-                return (mode_id, result, None)
 
             elif mode_id == "llm_output_verification":
                 from orchestrator.llm_output_orchestrator import LLMInterpretationOrchestrator

@@ -455,8 +455,9 @@ class BiasCheckOrchestrator:
         text: str,
         publication_url: Optional[str] = None,
         publication_name: Optional[str] = None,
-        source_credibility: Optional[Dict[str, Any]] = None,  # NEW PARAMETER
-        job_id: Optional[str] = None
+        source_credibility: Optional[Dict[str, Any]] = None,
+        job_id: Optional[str] = None,
+        standalone: bool = True  # ADD THIS
     ) -> dict:
         """
         Process with real-time progress updates (for web interface)
@@ -540,7 +541,8 @@ class BiasCheckOrchestrator:
                 job_manager.add_progress(job_id, f"⚠️ R2 upload failed: {error_msg}")
 
             job_manager.add_progress(job_id, "✅ Bias analysis complete!")
-            job_manager.complete_job(job_id, result)
+            if standalone:
+                job_manager.complete_job(job_id, result)
 
         return result
 

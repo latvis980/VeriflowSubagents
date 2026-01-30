@@ -170,7 +170,8 @@ class ManipulationOrchestrator:
         content: str,
         job_id: str,
         source_info: str = "Unknown source",
-        source_credibility: Optional[Dict[str, Any]] = None  # NEW
+        source_credibility: Optional[Dict[str, Any]] = None,
+        standalone: bool = True  # ADD THIS
     ) -> Dict[str, Any]:
         """
         Run the full manipulation detection pipeline with progress updates
@@ -484,7 +485,8 @@ class ManipulationOrchestrator:
 
             job_manager.add_progress(job_id, "✅ Analysis complete!")
 
-            job_manager.complete_job(job_id, result)
+            if standalone:
+                job_manager.complete_job(job_id, result)
 
             fact_logger.logger.info(
                 "✅ Manipulation detection pipeline complete",

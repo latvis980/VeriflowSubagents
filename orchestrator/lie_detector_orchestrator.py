@@ -281,7 +281,8 @@ class LieDetectorOrchestrator:
         url: Optional[str] = None,
         publication_date: Optional[str] = None,
         article_source: Optional[str] = None,
-        source_credibility: Optional[Dict[str, Any]] = None  # NEW PARAMETER
+        source_credibility: Optional[Dict[str, Any]] = None,
+        standalone: bool = True  # ADD THIS
     ) -> dict:
         """
         Process with real-time progress updates (for web interface)
@@ -350,14 +351,16 @@ class LieDetectorOrchestrator:
             job_manager.add_progress(job_id, "✅ Lie detection analysis complete!")
 
             # Complete the job
-            job_manager.complete_job(job_id, result)
+            if standalone:
+                job_manager.complete_job(job_id, result)
 
             return result
 
         except Exception as e:
             if "cancelled" in str(e).lower():
                 job_manager.add_progress(job_id, "🛑 Analysis cancelled")
-                job_manager.fail_job(job_id, "Cancelled by user")
+                if standalone:
+                    job_manager.fail_job(job_id, "Cancelled by user")
             else:
                 fact_logger.log_component_error(f"Job {job_id}", e)
                 job_manager.fail_job(job_id, str(e))

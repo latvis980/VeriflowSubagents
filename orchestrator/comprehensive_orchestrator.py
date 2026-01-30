@@ -73,7 +73,7 @@ class ComprehensiveOrchestrator:
 
         # Stage 1 components
         self.content_classifier = ContentClassifier()
-        self.source_verifier = SourceVerifier()
+        self.source_verifier = SourceVerifier(config)
         self.mode_router = ModeRouter()
 
         # Stage 2 orchestrators (initialized on demand)

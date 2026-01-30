@@ -19,18 +19,21 @@ import asyncio
 import time
 import re
 import os
-from typing import Dict, List, Optional, TYPE_CHECKING
+from typing import Dict, List, Optional
 from urllib.parse import urlparse
 from playwright.async_api import async_playwright, Browser, Page
 
 from utils.logger import fact_logger
 
 # NEW: Import content cleaner for AI-powered noise removal
+CONTENT_CLEANER_AVAILABLE = False
+ArticleContentCleaner = None  # Will be set if import succeeds
+
 try:
-    from utils.article_content_cleaner import ArticleContentCleaner
+    from utils.article_content_cleaner import ArticleContentCleaner as _ArticleContentCleaner
+    ArticleContentCleaner = _ArticleContentCleaner
     CONTENT_CLEANER_AVAILABLE = True
 except ImportError:
-    CONTENT_CLEANER_AVAILABLE = False
     fact_logger.logger.info("ℹ️ ArticleContentCleaner not available, using basic cleaning only")
 
 
@@ -79,8 +82,8 @@ class BrowserlessScraper:
         self.load_wait_time = 2.0
         self.interaction_delay = 0.5
 
-        # AI-powered content cleaner
-        self._content_cleaner = None
+        # AI-powered content cleaner (initialized lazily)
+        self._content_cleaner: Optional[object] = None
         self.enable_ai_cleaning = True  # Can be disabled if needed
 
         # Stats tracking
@@ -113,9 +116,9 @@ class BrowserlessScraper:
             ai_cleaning=CONTENT_CLEANER_AVAILABLE
         )
 
-    def _get_content_cleaner(self) -> Optional['ArticleContentCleaner']:
+    def _get_content_cleaner(self):
         """Lazy initialization of content cleaner"""
-        if self._content_cleaner is None and CONTENT_CLEANER_AVAILABLE:
+        if self._content_cleaner is None and CONTENT_CLEANER_AVAILABLE and ArticleContentCleaner is not None:
             try:
                 self._content_cleaner = ArticleContentCleaner(self.config)
                 fact_logger.logger.info("✅ AI content cleaner initialized")
@@ -442,16 +445,24 @@ class BrowserlessScraper:
                 if self.enable_ai_cleaning and CONTENT_CLEANER_AVAILABLE:
                     try:
                         cleaner = self._get_content_cleaner()
-                        if cleaner:
+                        if cleaner is not None:
                             cleaning_result = await asyncio.wait_for(
-                                cleaner.clean(url, content),
-                                timeout=15.0  # AI cleaning timeout
+                                cleaner.clean(url, content),  # type: ignore[union-attr]
+                                timeout=15.0
                             )
 
-                            if cleaning_result.success and cleaning_result.cleaned.body:
+                            # Check if cleaning was successful and we have cleaned content
+                            if (cleaning_result.success 
+                                and cleaning_result.cleaned is not None 
+                                and cleaning_result.cleaned.body):
+
                                 original_len = len(content)
                                 content = cleaning_result.cleaned.body
                                 self.stats["ai_cleaned"] += 1
+
+                                # Safely access cleaned attributes
+                                is_truncated = cleaning_result.cleaned.is_truncated
+                                noise_removed = cleaning_result.cleaned.noise_removed
 
                                 fact_logger.logger.info(
                                     f"🧹 AI cleaned: {original_len} → {len(content)} chars "
@@ -460,15 +471,16 @@ class BrowserlessScraper:
                                         "url": url,
                                         "original_length": original_len,
                                         "cleaned_length": len(content),
-                                        "is_truncated": cleaning_result.cleaned.is_truncated,
-                                        "noise_removed": cleaning_result.cleaned.noise_removed
+                                        "is_truncated": is_truncated,
+                                        "noise_removed": noise_removed
                                     }
                                 )
                             else:
                                 self.stats["ai_cleaning_failed"] += 1
+                                error_msg = cleaning_result.error if cleaning_result else "No result"
                                 fact_logger.logger.debug(
-                                    f"⚠️ AI cleaning returned no content, using basic cleaning",
-                                    extra={"url": url, "error": cleaning_result.error}
+                                    "⚠️ AI cleaning returned no content, using basic cleaning",
+                                    extra={"url": url, "error": error_msg}
                                 )
                     except asyncio.TimeoutError:
                         self.stats["ai_cleaning_failed"] += 1
@@ -747,7 +759,13 @@ class BrowserlessScraper:
                         '.article-content',
                         '.post-content',
                         '#content',
-                        '#main'
+                        '#main',
+                        // WordPress selectors (used by MBFC and many other sites)
+                        '.entry-content',
+                        '.post-entry',
+                        '.site-content', 
+                        '.page-content',
+                        '#primary'
                     ];
 
                     let bestContent = '';

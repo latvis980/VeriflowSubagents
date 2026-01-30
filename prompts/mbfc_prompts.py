@@ -35,6 +35,21 @@ Return ONLY valid JSON in this exact format:
   "reason": "Brief explanation"
 }}"""
 
+VERIFY_PUBLICATION_USER = """TARGET DOMAIN: {target_domain}
+
+MBFC PAGE CONTENT:
+{mbfc_content}
+
+Find the source URL/website that this MBFC page is reviewing, and determine if it matches the target domain "{target_domain}".
+
+Return ONLY valid JSON in this exact format:
+{{
+  "is_match": true or false,
+  "source_url_found": "The actual source URL found on the MBFC page (e.g., 'https://www.elmundo.es') or null if not found",
+  "publication_name": "Name of publication found on MBFC page",
+  "country_found": "Country mentioned on MBFC page",
+  "reason": "Brief explanation - if not a match, explain WHY"
+}}"""
 
 # Prompt to extract structured bias data from MBFC page
 # UPDATED: Now includes country_freedom_rating

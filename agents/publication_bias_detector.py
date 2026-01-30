@@ -382,13 +382,7 @@ class PublicationBiasDetector:
 
     async def lookup_mbfc(self, domain: str) -> Optional[MBFCResult]:
         """
-        Look up publication on MBFC using dedicated MBFC scraper with ad blocking.
-
-        Args:
-            domain: Clean domain (e.g., "cnn.com")
-
-        Returns:
-            MBFCResult if found and verified, None otherwise
+        Look up publication on MBFC with VERIFICATION.
         """
         # Check database first before web lookup
         cached_result = await self.check_database_first(domain)
@@ -410,99 +404,117 @@ class PublicationBiasDetector:
                 fact_logger.logger.info(f"No MBFC results found for {domain}")
                 return None
 
-            # Step 2: Find the most relevant MBFC URL
-            mbfc_url = None
+            # Step 2: Try EACH result until we find a VERIFIED match
+            # THIS IS THE KEY FIX - loop through results and verify each one
             for result in results.results[:5]:
                 url = result.get('url', '')
-                if '/202' in url:  # Skip blog posts
+
+                # Skip blog posts
+                if '/202' in url:
                     continue
-                if 'mediabiasfactcheck.com' in url and '-bias' in url:
-                    mbfc_url = url
-                    break
+                if 'mediabiasfactcheck.com' not in url:
+                    continue
 
-            if not mbfc_url:
-                for result in results.results[:3]:
-                    url = result.get('url', '')
-                    if 'mediabiasfactcheck.com' in url:
-                        mbfc_url = url
-                        break
+                fact_logger.logger.info(f"Checking MBFC page: {url}")
 
-            if not mbfc_url or 'mediabiasfactcheck.com' not in mbfc_url:
-                fact_logger.logger.info(f"No valid MBFC page found for {domain}")
-                return None
+                # Step 3: Initialize browser pool if needed
+                await self.scraper._initialize_browser_pool(min_browsers=1)
 
-            fact_logger.logger.info(f"Found MBFC page: {mbfc_url}")
-
-            # Step 3: Initialize browser pool if needed
-            await self.scraper._initialize_browser_pool(min_browsers=1)
-
-            if not self.scraper.browser_pool:
-                fact_logger.logger.error("No browser available for MBFC scraping")
-                return None
-
-            browser = self.scraper.browser_pool[0]
-            page = None
-
-            try:
-                # Create new page
-                page = await browser.new_page()
-
-                # IMPORTANT: Let the MBFC scraper handle everything
-                # including ad blocking setup and navigation
-                extracted_data = await self.mbfc_scraper.scrape_mbfc_page(page, mbfc_url)
-
-                if not extracted_data:
-                    fact_logger.logger.warning(f"Failed to extract data from MBFC page: {mbfc_url}")
+                if not self.scraper.browser_pool:
+                    fact_logger.logger.error("No browser available for MBFC scraping")
                     return None
 
-                # Convert MBFCExtractedData to MBFCResult
-                mbfc_result = MBFCResult(
-                    publication_name=extracted_data.publication_name,
-                    bias_rating=extracted_data.bias_rating,
-                    bias_score=extracted_data.bias_score,
-                    factual_reporting=extracted_data.factual_reporting,
-                    factual_score=extracted_data.factual_score,
-                    credibility_rating=extracted_data.credibility_rating,
-                    country_freedom_rating=extracted_data.country_freedom_rating,
-                    country=extracted_data.country,
-                    media_type=extracted_data.media_type,
-                    traffic_popularity=extracted_data.traffic_popularity,
-                    ownership=extracted_data.ownership,
-                    funding=extracted_data.funding,
-                    failed_fact_checks=extracted_data.failed_fact_checks,
-                    summary=extracted_data.summary,
-                    special_tags=extracted_data.special_tags,
-                    mbfc_url=mbfc_url
-                )
+                browser = self.scraper.browser_pool[0]
+                page = None
 
-                fact_logger.logger.info(
-                    f"MBFC data extracted for {mbfc_result.publication_name}",
-                    extra={
-                        "bias": mbfc_result.bias_rating,
-                        "factual": mbfc_result.factual_reporting,
-                        "credibility": mbfc_result.credibility_rating
-                    }
-                )
+                try:
+                    page = await browser.new_page()
 
-                # Save to Supabase database
-                if self.supabase_enabled:
+                    # Scrape the page
+                    extracted_data = await self.mbfc_scraper.scrape_mbfc_page(page, url)
+
+                    if not extracted_data:
+                        fact_logger.logger.warning(f"Failed to extract data from MBFC page: {url}")
+                        continue  # Try next result
+
+                    # =====================================================
+                    # THIS IS THE CRITICAL FIX - VERIFY BEFORE RETURNING
+                    # =====================================================
+
+                    # Get page content for verification
                     try:
-                        await self.save_mbfc_to_database(domain, mbfc_result)
-                    except Exception as e:
-                        fact_logger.logger.warning(f"Database save failed (non-critical): {e}")
-
-                return mbfc_result
-
-            finally:
-                if page:
-                    try:
-                        await page.close()
+                        page_content = await page.evaluate("() => document.body.innerText")
                     except Exception:
-                        pass
+                        page_content = ""
+
+                    # Call the verification method that was never being used!
+                    is_match = await self._verify_publication(domain, page_content)
+
+                    if not is_match:
+                        fact_logger.logger.warning(
+                            f"MBFC page {url} is NOT about {domain} - trying next result"
+                        )
+                        continue  # TRY NEXT RESULT instead of returning wrong publication
+
+                    # =====================================================
+                    # VERIFIED MATCH - proceed with returning the result
+                    # =====================================================
+
+                    fact_logger.logger.info(f"VERIFIED MBFC match for {domain}: {extracted_data.publication_name}")
+
+                    # Convert MBFCExtractedData to MBFCResult
+                    mbfc_result = MBFCResult(
+                        publication_name=extracted_data.publication_name,
+                        bias_rating=extracted_data.bias_rating,
+                        bias_score=extracted_data.bias_score,
+                        factual_reporting=extracted_data.factual_reporting,
+                        factual_score=extracted_data.factual_score,
+                        credibility_rating=extracted_data.credibility_rating,
+                        country_freedom_rating=extracted_data.country_freedom_rating,
+                        country=extracted_data.country,
+                        media_type=extracted_data.media_type,
+                        traffic_popularity=extracted_data.traffic_popularity,
+                        ownership=extracted_data.ownership,
+                        funding=extracted_data.funding,
+                        failed_fact_checks=extracted_data.failed_fact_checks,
+                        summary=extracted_data.summary,
+                        special_tags=extracted_data.special_tags,
+                        mbfc_url=url
+                    )
+
+                    fact_logger.logger.info(
+                        f"MBFC data extracted for {mbfc_result.publication_name}",
+                        extra={
+                            "bias": mbfc_result.bias_rating,
+                            "factual": mbfc_result.factual_reporting,
+                            "credibility": mbfc_result.credibility_rating
+                        }
+                    )
+
+                    # Save to Supabase database
+                    if self.supabase_enabled:
+                        try:
+                            await self.save_mbfc_to_database(domain, mbfc_result)
+                        except Exception as e:
+                            fact_logger.logger.warning(f"Database save failed (non-critical): {e}")
+
+                    return mbfc_result
+
+                finally:
+                    if page:
+                        try:
+                            await page.close()
+                        except Exception:
+                            pass
+
+            # No verified match found after checking all results
+            fact_logger.logger.info(f"No verified MBFC match found for {domain} after checking all results")
+            return None
 
         except Exception as e:
             fact_logger.logger.error(f"MBFC lookup failed: {e}", exc_info=True)
             return None
+
 
     async def _verify_publication(self, target_domain: str, mbfc_content: str) -> bool:
         """Verify that the MBFC page is about the correct publication"""
